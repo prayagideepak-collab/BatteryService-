@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -21,13 +22,34 @@ import java.util.*
 fun DevicesIntelligenceCenterDashboard(
     repository: DeviceRepository
 ) {
+    val context = LocalContext.current
     val allDevices by repository.allDevices.collectAsState(initial = emptyList())
+    val btBatteryStates by com.example.service.BluetoothBatteryManager.bluetoothBatteryStates.collectAsState(initial = emptyMap())
+
+    androidx.compose.runtime.DisposableEffect(context) {
+        com.example.service.BluetoothBatteryManager.register(context)
+        onDispose {
+            com.example.service.BluetoothBatteryManager.unregister(context)
+        }
+    }
+
+    val updatedDevices = allDevices.map { device ->
+        if (device.type == "BLUETOOTH") {
+            val state = btBatteryStates[device.macAddress]
+            if (state != null) {
+                device.copy(
+                    batteryLevel = if (state.batteryLevel >= 0) state.batteryLevel else null,
+                    isConnected = state.isConnected
+                )
+            } else device
+        } else device
+    }
     
-    val wifiConnected = allDevices.filter { it.type == "WIFI" && it.isConnected }
-    val wifiOffline = allDevices.filter { it.type == "WIFI" && !it.isConnected }
-    val btConnected = allDevices.filter { it.type == "BLUETOOTH" && it.isConnected }
-    val btOffline = allDevices.filter { it.type == "BLUETOOTH" && !it.isConnected }
-    val lowBattery = allDevices.filter { it.type == "BLUETOOTH" && it.isConnected && (it.batteryLevel ?: 100) <= 25 }
+    val wifiConnected = updatedDevices.filter { it.type == "WIFI" && it.isConnected }
+    val wifiOffline = updatedDevices.filter { it.type == "WIFI" && !it.isConnected }
+    val btConnected = updatedDevices.filter { it.type == "BLUETOOTH" && it.isConnected }
+    val btOffline = updatedDevices.filter { it.type == "BLUETOOTH" && !it.isConnected }
+    val lowBattery = updatedDevices.filter { it.type == "BLUETOOTH" && it.isConnected && (it.batteryLevel ?: 100) <= 25 }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -87,9 +109,9 @@ fun DeviceCard(device: Device) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(device.name, fontWeight = FontWeight.Bold)
             Text("Type: ${device.type}", style = MaterialTheme.typography.bodySmall)
-            if (device.batteryLevel != null) {
-                Text("Battery: ${device.batteryLevel}% ${if(device.isCharging) "(Charging)" else ""}", style = MaterialTheme.typography.bodySmall)
-            }
+            val batLevel = device.batteryLevel
+            val batDisplay = if (batLevel != null && batLevel >= 0) "$batLevel% ${if(device.isCharging) "(Charging)" else ""}" else "Unavailable"
+            Text("Battery: $batDisplay", style = MaterialTheme.typography.bodySmall)
             Text("Last Seen: ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(device.lastSeen))}", style = MaterialTheme.typography.bodySmall)
         }
     }

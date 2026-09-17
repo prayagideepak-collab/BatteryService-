@@ -395,17 +395,9 @@ fun NetraUnifiedGraphCanvas(
     abnormalDropColor: Color = Color(0xFFFF1744)
 ) {
     val is24h = timeRange == NetraTimeRange.TWENTY_FOUR_HOURS
-    val startWindowMs = if (is24h) {
-        TimeManager.getStartOfLocalDay(selectedDateMs)
-    } else {
-        val now = System.currentTimeMillis()
-        now - timeRange.durationMs
-    }
-    val endWindowMs = if (is24h) {
-        TimeManager.getEndOfLocalDay(selectedDateMs)
-    } else {
-        System.currentTimeMillis()
-    }
+    val now = System.currentTimeMillis()
+    val startWindowMs = now - timeRange.durationMs
+    val endWindowMs = now
 
     var touchedIndex by remember(points, timeRange, selectedDateMs) { mutableStateOf<Int?>(null) }
 
@@ -507,8 +499,12 @@ fun NetraUnifiedGraphCanvas(
                     val rangeY = (maxBound - minBound).coerceAtLeast(0.01f)
                     val totalDurationMs = (endWindowMs - startWindowMs).coerceAtLeast(1000L)
 
-                    // Draw Horizontal Grid Lines & Y-Labels
-                    val gridFractions = listOf(0.0f, 0.5f, 1.0f)
+                    // Draw Horizontal Grid Lines & Y-Labels (10% fixed intervals for Battery Level, 3 for others)
+                    val gridFractions = if (isBatteryLevel) {
+                        listOf(0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f)
+                    } else {
+                        listOf(0.0f, 0.5f, 1.0f)
+                    }
                     gridFractions.forEach { fraction ->
                         val y = topPad + (1f - fraction) * drawHeight
                         drawLine(
@@ -555,9 +551,18 @@ fun NetraUnifiedGraphCanvas(
                         )
                     }
 
+                    val latestPoint = points.lastOrNull()
                     val effectiveLineColor = when {
                         metricType == NetraMetricType.TEMPERATURE -> Color(0xFFFF9100)
                         metricType == NetraMetricType.CURRENT || metricType == NetraMetricType.POWER -> positiveColor
+                        metricType == NetraMetricType.BATTERY_LEVEL -> {
+                            when {
+                                latestPoint?.secondaryText?.contains("Continuous", ignoreCase = true) == true -> Color(0xFF2196F3) // Blue
+                                latestPoint?.isCharging == true -> Color(0xFF4CAF50) // Green
+                                latestPoint?.isAbnormalDrop == true -> Color(0xFFB71C1C) // Dark/Strong Red
+                                else -> Color(0xFFE53935) // Red (Normal Discharging)
+                            }
+                        }
                         else -> lineColor
                     }
 

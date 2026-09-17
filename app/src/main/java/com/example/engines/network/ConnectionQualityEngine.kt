@@ -9,39 +9,50 @@ enum class ConnectionQuality(
     val emoji: String,
     val colorName: String
 ) {
-    STABLE("STABLE", "STABLE", 0xFF4CAF50, "🟢", "GREEN"),
-    DEGRADED("DEGRADED", "DEGRADED", 0xFFFBC02D, "🟡", "YELLOW"),
-    WEAK("WEAK", "WEAK", 0xFFFF9800, "🟠", "ORANGE"),
-    DISCONNECTED("DISCONNECTED", "DISCONNECTED", 0xFFF44336, "🔴", "RED"),
+    GREEN("GREEN", "STABLE", 0xFF4CAF50, "🟢", "GREEN"),
+    ORANGE("ORANGE", "MODERATE", 0xFFFF9800, "🟠", "ORANGE"),
+    RED("RED", "POOR", 0xFFF44336, "🔴", "RED"),
+    DISCONNECTED("DISCONNECTED", "DISCONNECTED", 0xFF9E9E9E, "⚪", "GRAY"),
     UNAVAILABLE("UNAVAILABLE", "UNAVAILABLE", 0xFF9E9E9E, "⚪", "GRAY")
 }
 
 object ConnectionQualityEngine {
     fun getWifiQuality(isConnected: Boolean, signalPercent: Int): ConnectionQuality {
         if (!isConnected) return ConnectionQuality.DISCONNECTED
+        val normalized = signalPercent.coerceIn(0, 100)
         return when {
-            signalPercent >= 70 -> ConnectionQuality.STABLE
-            signalPercent >= 35 -> ConnectionQuality.DEGRADED
-            else -> ConnectionQuality.WEAK
+            normalized >= 70 -> ConnectionQuality.GREEN
+            normalized >= 25 -> ConnectionQuality.ORANGE
+            else -> ConnectionQuality.RED
         }
     }
 
     fun getInternetQuality(isConnected: Boolean, isInternetAvailable: Boolean, speedMbps: Double, latencyMs: Int): ConnectionQuality {
         if (!isConnected || !isInternetAvailable) return ConnectionQuality.DISCONNECTED
+        // Map speed & latency to 0-100 score
+        val speedScore = (speedMbps * 2.0).coerceIn(0.0, 50.0)
+        val latencyScore = when {
+            latencyMs <= 40 -> 50.0
+            latencyMs <= 120 -> 30.0
+            else -> 10.0
+        }
+        val totalScore = (speedScore + latencyScore).toInt().coerceIn(0, 100)
         return when {
-            speedMbps >= 25.0 && (latencyMs in 0..60) -> ConnectionQuality.STABLE
-            speedMbps >= 5.0 && (latencyMs in 0..150) -> ConnectionQuality.DEGRADED
-            else -> ConnectionQuality.WEAK
+            totalScore >= 70 -> ConnectionQuality.GREEN
+            totalScore >= 25 -> ConnectionQuality.ORANGE
+            else -> ConnectionQuality.RED
         }
     }
 
     fun getBluetoothQuality(isEnabled: Boolean, isConnected: Boolean, rssi: Int): ConnectionQuality {
         if (!isEnabled) return ConnectionQuality.UNAVAILABLE
         if (!isConnected) return ConnectionQuality.DISCONNECTED
+        val percent = if (rssi <= -100) 0 else if (rssi >= -30) 100 else ((rssi + 100f) * 100f / 70f).toInt().coerceIn(0, 100)
         return when {
-            rssi >= -65 -> ConnectionQuality.STABLE
-            rssi >= -85 -> ConnectionQuality.DEGRADED
-            else -> ConnectionQuality.WEAK
+            percent >= 70 -> ConnectionQuality.GREEN
+            percent >= 25 -> ConnectionQuality.ORANGE
+            else -> ConnectionQuality.RED
         }
     }
 }
+

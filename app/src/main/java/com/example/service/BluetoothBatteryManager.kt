@@ -68,23 +68,39 @@ object BluetoothBatteryManager {
                             Log.i(TAG, "Device disconnected: $name ($address)")
                             BluetoothBatteryAnnouncementEngine.onDeviceDisconnected(ctx, address, name)
                         }
-                        "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED",
-                        "android.bluetooth.adapter.action.CONNECTION_STATE_CHANGED" -> {
+                        "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED" -> {
                             val batteryLevel = fetchBatteryLevel(device)
                             val existing = _bluetoothBatteryStates.value[address]
+                            if (existing != null && existing.isConnected) {
+                                val isAudio = existing.isAudioDevice
+                                val type = existing.deviceType
+                                updateState(address, BluetoothBatteryState(
+                                    name = existing.name,
+                                    address = address,
+                                    batteryLevel = batteryLevel,
+                                    isConnected = true,
+                                    deviceType = type,
+                                    isAudioDevice = isAudio
+                                ))
+                                Log.i(TAG, "Battery broadcast received for ${existing.name} ($address): $batteryLevel%")
+                                if (batteryLevel >= 0) {
+                                    BluetoothBatteryAnnouncementEngine.onBatteryLevelChanged(ctx, address, existing.name, batteryLevel, isAudio)
+                                }
+                            }
+                        }
+                        "android.bluetooth.adapter.action.CONNECTION_STATE_CHANGED" -> {
+                            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_CONNECTION_STATE, BluetoothAdapter.STATE_DISCONNECTED)
+                            val isConnected = (state == BluetoothAdapter.STATE_CONNECTED)
+                            val existing = _bluetoothBatteryStates.value[address]
+                            val batteryLevel = if (isConnected) fetchBatteryLevel(device) else -1
                             val isAudio = isAudioDevice(device)
                             val type = existing?.deviceType ?: getDeviceType(device)
-                            updateState(address, BluetoothBatteryState(
-                                name = existing?.name ?: name,
-                                address = address,
-                                batteryLevel = batteryLevel,
-                                isConnected = true,
-                                deviceType = type,
-                                isAudioDevice = isAudio
-                            ))
-                            Log.i(TAG, "Battery broadcast received for $name ($address): $batteryLevel%")
-                            if (batteryLevel >= 0) {
-                                BluetoothBatteryAnnouncementEngine.onBatteryLevelChanged(ctx, address, name, batteryLevel, isAudio)
+                            if (isConnected) {
+                                updateState(address, BluetoothBatteryState(name, address, batteryLevel, true, type, isAudio))
+                                BluetoothBatteryAnnouncementEngine.onDeviceConnected(ctx, address, name, batteryLevel, type, isAudio)
+                            } else {
+                                updateState(address, BluetoothBatteryState(name, address, -1, false, type, isAudio))
+                                BluetoothBatteryAnnouncementEngine.onDeviceDisconnected(ctx, address, name)
                             }
                         }
                     }

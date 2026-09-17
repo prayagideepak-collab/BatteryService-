@@ -1,21 +1,50 @@
 package com.example.service
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.BatteryManager
 import android.os.Build
 import android.util.Log
 import com.example.engines.notification.EventPriority
 import com.example.engines.notification.NotificationEvent
 import com.example.engines.notification.modules.AnnouncementQueue
+import com.example.providers.SafeTelephonyProvider
 
 object BluetoothBatteryAnnouncementEngine {
     private const val TAG = "BtBatteryAnnouncement"
-    private val THRESHOLDS = listOf(10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
 
-    private fun routeAudio(context: Context, isAudioDevice: Boolean) {
+    private fun isPhoneBatteryLow(context: Context): Boolean {
+        try {
+            val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            val batteryStatus = context.applicationContext.registerReceiver(null, filter)
+            val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: 100
+            if (level >= 0 && scale > 0) {
+                val pct = (level * 100) / scale
+                return pct <= 30
+            }
+        } catch (e: Exception) {}
+        return false
+    }
+
+    private fun pauseActiveMedia(context: Context) {
+        try {
+            val audioManager = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+            if (audioManager.isMusicActive) {
+                val downEvent = android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE)
+                audioManager.dispatchMediaKeyEvent(downEvent)
+                val upEvent = android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE)
+                audioManager.dispatchMediaKeyEvent(upEvent)
+            }
+        } catch (e: Exception) {}
+    }
+
+    private fun routeAudio(context: Context, isAudioDevice: Boolean): Boolean {
         val appContext = context.applicationContext
-        val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return true
         val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
         val hasBtAudioOutput = outputs.any { 
             it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || 
@@ -48,6 +77,7 @@ object BluetoothBatteryAnnouncementEngine {
                 }
             } catch (e: Exception) {}
         }
+        return forcePhoneSpeaker
     }
 
     fun onDeviceConnected(context: Context, address: String, name: String, batteryLevel: Int, deviceType: String, isAudioDevice: Boolean) {
@@ -67,9 +97,9 @@ object BluetoothBatteryAnnouncementEngine {
             routeAudio(appContext, isAudioDevice)
 
             val text = if (batteryLevel >= 0) {
-                "$name connected. Battery level is $batteryLevel percent."
+                "BT connected. Battery $batteryLevel percent."
             } else {
-                "$name connected."
+                "BT connected."
             }
             Log.i(TAG, "Announcing BT Connection: $text")
             AnnouncementQueue.enqueue(
@@ -83,7 +113,14 @@ object BluetoothBatteryAnnouncementEngine {
 
     fun onDeviceDisconnected(context: Context, address: String, name: String) {
         val appContext = context.applicationContext
-        if (AnnouncementPolicyChecker.shouldSkipAnnouncement(appContext)) return
+        val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val isCallActive = audioManager?.mode == AudioManager.MODE_IN_CALL ||
+                           audioManager?.mode == AudioManager.MODE_RINGTONE ||
+                           audioManager?.mode == AudioManager.MODE_IN_COMMUNICATION ||
+                           SafeTelephonyProvider.isCallActive(appContext)
+        if (isCallActive) return
+
+        pauseActiveMedia(appContext)
 
         val prefs = appContext.getSharedPreferences("bt_battery_announcement_prefs", Context.MODE_PRIVATE)
         val disconnectKey = "disconnected_session_$address"
@@ -93,10 +130,11 @@ object BluetoothBatteryAnnouncementEngine {
             prefs.edit()
                 .putBoolean(disconnectKey, true)
                 .remove("connected_session_$address")
-                .remove("threshold_$address")
+                .remove("low_battery_notified_$address")
+                .remove("last_low_bat_time_$address")
                 .apply()
 
-            val text = "$name disconnected."
+            val text = "BT disconnected."
             Log.i(TAG, "Announcing BT Disconnection: $text")
             AnnouncementQueue.enqueue(
                 appContext,
@@ -113,24 +151,40 @@ object BluetoothBatteryAnnouncementEngine {
         if (batteryLevel < 0) return
 
         val prefs = appContext.getSharedPreferences("bt_battery_announcement_prefs", Context.MODE_PRIVATE)
-        val thresholdKey = "threshold_$address"
-        val previousBracket = prefs.getInt(thresholdKey, -1)
-        val currentBracket = THRESHOLDS.lastOrNull { batteryLevel >= it } ?: 10
+        val lowBatKey = "low_battery_notified_$address"
+        val lastTimeKey = "last_low_bat_time_$address"
+        val now = System.currentTimeMillis()
 
-        if (previousBracket == -1) {
-            prefs.edit().putInt(thresholdKey, currentBracket).apply()
-        } else if (currentBracket != previousBracket) {
-            prefs.edit().putInt(thresholdKey, currentBracket).apply()
-            routeAudio(appContext, isAudioDevice)
+        if (batteryLevel <= 30) {
+            val forcePhoneSpeaker = routeAudio(appContext, isAudioDevice)
+            if (forcePhoneSpeaker && isPhoneBatteryLow(appContext)) {
+                Log.i(TAG, "Suppressing BT low battery announcement on phone speaker because phone battery is <= 30%")
+                return
+            }
 
-            val text = "$name battery is $currentBracket percent."
-            Log.i(TAG, "Announcing BT Battery Threshold Crossing: $text")
-            AnnouncementQueue.enqueue(
-                appContext,
-                NotificationEvent.BLUETOOTH_LOW_BATTERY,
-                EventPriority.WARNING,
-                text
-            )
+            val lastTime = prefs.getLong(lastTimeKey, 0L)
+            val isInitial = !prefs.getBoolean(lowBatKey, false)
+
+            if (isInitial || (now - lastTime >= 10 * 60 * 1000L)) {
+                prefs.edit()
+                    .putBoolean(lowBatKey, true)
+                    .putLong(lastTimeKey, now)
+                    .apply()
+
+                val text = "BT battery is $batteryLevel percent."
+                Log.i(TAG, "Announcing BT Low Battery: $text")
+                AnnouncementQueue.enqueue(
+                    appContext,
+                    NotificationEvent.BLUETOOTH_LOW_BATTERY,
+                    EventPriority.WARNING,
+                    text
+                )
+            }
+        } else {
+            prefs.edit()
+                .putBoolean(lowBatKey, false)
+                .putLong(lastTimeKey, 0L)
+                .apply()
         }
     }
 }

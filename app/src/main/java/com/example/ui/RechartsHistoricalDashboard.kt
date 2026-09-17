@@ -45,7 +45,8 @@ data class RechartsDataPoint(
     val voltage: Int,               // mV
     val isSpike: Boolean,           // temperature >= 38.0°C
     val spikeSeverity: String,      // "NORMAL", "WARM", "CRITICAL", "OVERHEAT"
-    val info: String
+    val info: String,
+    val chargingType: String = "Unknown"
 )
 
 enum class RechartsTimeFrame(val label: String, val durationMs: Long) {
@@ -81,8 +82,8 @@ fun RechartsHistoricalDashboard(
 
         // 1. Convert Room trend logs
         val filteredLogs = if (selectedTimeFrame == RechartsTimeFrame.TWENTY_FOUR_HOURS) {
-            val startTime = com.example.util.TimeManager.getStartOfLocalDay(now)
-            val endTime = com.example.util.TimeManager.getEndOfLocalDay(now)
+            val startTime = now - 24 * 3600 * 1000L
+            val endTime = now
             trendLogs.filter { it.timestamp in startTime..endTime }.sortedBy { it.timestamp }
         } else {
             val startTime = now - selectedTimeFrame.durationMs
@@ -90,7 +91,13 @@ fun RechartsHistoricalDashboard(
         }
 
         filteredLogs.forEach { log ->
-            val isCharging = log.dischargeRate <= 0f
+            val matchingSession = sessions.firstOrNull { s ->
+                val sStart = s.startTime
+                val sEnd = s.endTime ?: now
+                log.timestamp in sStart..sEnd
+            }
+            val chargingType = matchingSession?.chargingType ?: if (log.dischargeRate <= 0f) "AC" else "Discharging"
+            val isCharging = log.dischargeRate <= 0f || (matchingSession != null && !matchingSession.isDischarge)
             val temp = log.temperature
             val isSpike = temp >= 38.0f
             val severity = when {
@@ -109,7 +116,8 @@ fun RechartsHistoricalDashboard(
                     voltage = log.voltage,
                     isSpike = isSpike,
                     spikeSeverity = severity,
-                    info = if (isSpike) "⚠️ Thermal Spike: ${temp}°C" else if (isCharging) "Charging" else "Discharging"
+                    info = if (isSpike) "⚠️ Thermal Spike: ${temp}°C" else if (isCharging) "Charging ($chargingType)" else "Discharging",
+                    chargingType = chargingType
                 )
             )
         }
@@ -251,15 +259,12 @@ fun RechartsHistoricalDashboard(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Card A: Battery Level (%) Independent Graph
-            HistoricalMetricCard(
+            BatteryHistoricalMetricCard(
                 title = "Battery Level (%)",
                 currentValue = points.lastOrNull()?.let { "${it.level.toInt()}%" } ?: "Unavailable",
-                unit = "0% - 100%",
-                lineColor = primaryColor,
+                unit = "0% - 100% (Rolling 24h)",
                 points = points,
-                valueSelector = { it.level },
-                maxValue = 100f,
-                minValue = 0f,
+                sessions = sessions,
                 textMeasurer = textMeasurer,
                 density = density,
                 gridColor = gridColor,
@@ -630,5 +635,255 @@ fun HistoricalMetricCard(
                 Text(text = "Live Stream", fontSize = 9.sp, color = lineColor.copy(alpha = 0.8f))
             }
         }
+    }
+}
+
+fun getPointStateColor(isCharging: Boolean, dischargeRate: Float, chargingType: String): Triple<Color, Color, String> {
+    return if (isCharging) {
+        if (chargingType.equals("AC", true) || chargingType.equals("Wireless", true)) {
+            Triple(Color(0xFF2196F3), Color(0xFF2196F3).copy(alpha = 0.22f), "Continuous Charging")
+        } else {
+            Triple(Color(0xFF4CAF50), Color(0xFF4CAF50).copy(alpha = 0.22f), "Normal Charging")
+        }
+    } else {
+        if (dischargeRate > 15f) {
+            Triple(Color(0xFFB71C1C), Color(0xFFB71C1C).copy(alpha = 0.28f), "Fast Discharging")
+        } else {
+            Triple(Color(0xFFE53935), Color(0xFFE53935).copy(alpha = 0.22f), "Normal Discharging")
+        }
+    }
+}
+
+@OptIn(ExperimentalTextApi::class)
+@Composable
+fun BatteryHistoricalMetricCard(
+    title: String,
+    currentValue: String,
+    unit: String,
+    points: List<RechartsDataPoint>,
+    sessions: List<ChargingSession>,
+    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    density: androidx.compose.ui.unit.Density,
+    gridColor: Color,
+    onSurfaceVariant: Color,
+    selectedTimeFrame: RechartsTimeFrame
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0C14)),
+        border = BorderStroke(0.5.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(modifier = Modifier.size(8.dp).background(Color(0xFF4CAF50), CircleShape))
+                    Text(
+                        text = title,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+                Text(
+                    text = currentValue,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF4CAF50)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF121624))
+                    .padding(4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (points.isEmpty()) {
+                    Text(
+                        text = "No historical telemetry points for this timeframe",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val width = size.width
+                        val height = size.height
+                        val paddingLeft = 32.dp.toPx()
+                        val paddingRight = 24.dp.toPx()
+                        val paddingTop = 12.dp.toPx()
+                        val paddingBottom = 24.dp.toPx()
+
+                        val chartWidth = width - paddingLeft - paddingRight
+                        val chartHeight = height - paddingTop - paddingBottom
+                        val range = 100f // 0% to 100%
+
+                        // 10% Y-axis grid steps (0, 10, 20, ..., 100)
+                        val gridSteps = 10
+                        for (i in 0..gridSteps) {
+                            val fraction = i.toFloat() / gridSteps
+                            val y = paddingTop + chartHeight * (1f - fraction)
+                            drawLine(
+                                color = gridColor,
+                                start = Offset(paddingLeft, y),
+                                end = Offset(width - paddingRight, y),
+                                strokeWidth = 1f,
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
+                            )
+
+                            val valLabel = (fraction * 100).toInt()
+                            drawText(
+                                textMeasurer = textMeasurer,
+                                text = "$valLabel%",
+                                topLeft = Offset(2.dp.toPx(), y - 6.dp.toPx()),
+                                style = TextStyle(color = onSurfaceVariant, fontSize = 7.sp, fontWeight = FontWeight.Medium)
+                            )
+                        }
+
+                        if (points.size > 1) {
+                            // Render segments by color state
+                            for (i in 1 until points.size) {
+                                val prevPt = points[i - 1]
+                                val pt = points[i]
+
+                                val prevXFraction = (i - 1).toFloat() / (points.size - 1)
+                                val prevX = paddingLeft + chartWidth * prevXFraction
+                                val prevNorm = (prevPt.level / range).coerceIn(0f, 1f)
+                                val prevY = paddingTop + chartHeight * (1f - prevNorm)
+
+                                val xFraction = i.toFloat() / (points.size - 1)
+                                val x = paddingLeft + chartWidth * xFraction
+                                val norm = (pt.level / range).coerceIn(0f, 1f)
+                                val y = paddingTop + chartHeight * (1f - norm)
+
+                                val (lineCol, areaCol, _) = getPointStateColor(pt.isCharging, pt.dischargeRate, pt.chargingType)
+
+                                val segPath = Path()
+                                segPath.moveTo(prevX, prevY)
+                                val cx = prevX + (x - prevX) / 2f
+                                segPath.cubicTo(cx, prevY, cx, y, x, y)
+
+                                val segArea = Path()
+                                segArea.moveTo(prevX, height - paddingBottom)
+                                segArea.lineTo(prevX, prevY)
+                                segArea.cubicTo(cx, prevY, cx, y, x, y)
+                                segArea.lineTo(x, height - paddingBottom)
+                                segArea.close()
+
+                                drawPath(
+                                    path = segArea,
+                                    color = areaCol
+                                )
+                                drawPath(
+                                    path = segPath,
+                                    color = lineCol,
+                                    style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Color Legend
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LegendItem(color = Color(0xFF4CAF50), label = "Normal Charging")
+                LegendItem(color = Color(0xFF2196F3), label = "Continuous")
+                LegendItem(color = Color(0xFFE53935), label = "Normal Discharge")
+                LegendItem(color = Color(0xFFB71C1C), label = "Fast Discharge")
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Recent Battery Events Log directly below graph
+            Text(
+                text = "RECENT BATTERY EVENTS",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = onSurfaceVariant,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val events = remember(points) {
+                val list = mutableListOf<Triple<Long, Int, String>>()
+                var lastState: String? = null
+                points.forEach { pt ->
+                    val (_, _, stateName) = getPointStateColor(pt.isCharging, pt.dischargeRate, pt.chargingType)
+                    if (stateName != lastState) {
+                        list.add(Triple(pt.timestamp, pt.level.toInt(), stateName))
+                        lastState = stateName
+                    }
+                }
+                list.sortedByDescending { it.first }.take(5)
+            }
+
+            if (events.isEmpty()) {
+                Text(
+                    text = "No recent battery events in this window",
+                    fontSize = 10.sp,
+                    color = Color.Gray
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    events.forEach { ev ->
+                        val dateStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(ev.first))
+                        val evColor = when {
+                            ev.third.contains("Continuous") -> Color(0xFF2196F3)
+                            ev.third.contains("Charging") -> Color(0xFF4CAF50)
+                            ev.third.contains("Fast") -> Color(0xFFB71C1C)
+                            else -> Color(0xFFE53935)
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(evColor.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(modifier = Modifier.size(6.dp).background(evColor, CircleShape))
+                                Text(text = dateStr, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(text = "•", fontSize = 10.sp, color = onSurfaceVariant)
+                                Text(text = "${ev.second}%", fontSize = 10.sp, fontWeight = FontWeight.Black, color = evColor)
+                            }
+                            Text(text = ev.third, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.9f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LegendItem(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(modifier = Modifier.size(6.dp).background(color, CircleShape))
+        Text(text = label, fontSize = 8.sp, color = Color.White.copy(alpha = 0.7f))
     }
 }

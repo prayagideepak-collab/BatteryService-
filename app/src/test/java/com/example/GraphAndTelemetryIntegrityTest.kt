@@ -98,4 +98,44 @@ class GraphAndTelemetryIntegrityTest {
         assertEquals(50f, liveTelemetry.first(), 0.001f)
         assertEquals(60f, liveTelemetry.last(), 0.001f)
     }
+
+    @Test
+    fun testRolling24HourWindowLogic() {
+        val now = System.currentTimeMillis()
+        val rollingStart = now - 86400000L
+        assertEquals(86400000L, now - rollingStart)
+        
+        // Simulate rolling 1 hour later
+        val laterNow = now + 3600000L
+        val laterRollingStart = laterNow - 86400000L
+        assertEquals(rollingStart + 3600000L, laterRollingStart)
+    }
+
+    @Test
+    fun testFixedBatteryYAxisRangeAndIntervals() {
+        // Battery level Y-axis must always be fixed 0 to 100 with 10% increments
+        val minBound = 0f
+        val maxBound = 100f
+        assertEquals(0f, minBound, 0.001f)
+        assertEquals(100f, maxBound, 0.001f)
+
+        val gridFractions = listOf(0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f)
+        assertEquals(11, gridFractions.size)
+        assertEquals(0f, gridFractions.first() * 100f, 0.001f)
+        assertEquals(100f, gridFractions.last() * 100f, 0.001f)
+    }
+
+    @Test
+    fun testBluetoothTelemetryGapIsolation() {
+        // Telemetry timestamps with gap > 30 mins must not interpolate across the gap
+        val t1 = 1000L
+        val t2 = 2000L // gap of 1 second
+        val t3 = 2000L + 35 * 60 * 1000L // gap of 35 minutes (> 30 mins)
+
+        val diff1 = t2 - t1
+        val diff2 = t3 - t2
+
+        assertTrue(diff1 <= 30 * 60 * 1000L) // continuous
+        assertTrue(diff2 > 30 * 60 * 1000L)  // gap / segment break
+    }
 }

@@ -566,6 +566,12 @@ fun NetraUnifiedGraphCanvas(
                         else -> lineColor
                     }
 
+                    val baselineY = if (metricType.isSigned && minBound < 0f) {
+                        topPad + (1f - ((0f - minBound) / rangeY)) * drawHeight
+                    } else {
+                        height - bottomPad
+                    }
+
                     // Map Points to Canvas Coordinates
                     val pointOffsets = mutableListOf<Pair<Offset, NetraUnifiedPoint>>()
                     points.forEach { pt ->
@@ -576,90 +582,97 @@ fun NetraUnifiedGraphCanvas(
                         pointOffsets.add(Pair(Offset(x, y), pt))
                     }
 
-                    // Draw Graph Line & Shading
+                    // Draw Graph Line & Shading with strict state-segment color mapping (no bleeding)
                     if (pointOffsets.isNotEmpty()) {
-                        val path = Path()
-                        val abnormalPaths = mutableListOf<Path>()
+                        // Helper to get color for a point
+                        fun getPtColor(pt: NetraUnifiedPoint): Color {
+                            return when (metricType) {
+                                NetraMetricType.TEMPERATURE -> Color(0xFFFF9100)
+                                NetraMetricType.CURRENT, NetraMetricType.POWER -> if (pt.value >= 0f) positiveColor else negativeColor
+                                NetraMetricType.BATTERY_LEVEL -> {
+                                    when {
+                                        pt.isAbnormalDrop -> Color(0xFFB71C1C) // Fast / Abnormal Drop: Dark Red
+                                        pt.secondaryText?.contains("Continuous", ignoreCase = true) == true -> Color(0xFF2196F3) // Blue
+                                        pt.isCharging -> Color(0xFF4CAF50) // Normal Charging: Green
+                                        else -> Color(0xFFE53935) // Normal Discharging: Red
+                                    }
+                                }
+                                NetraMetricType.VOLTAGE -> lineColor
+                            }
+                        }
 
-                        var activeAbnormalPath: Path? = null
-                        var segmentStartIdx = 0
+                        // Group into continuous segments where color and time continuity hold
+                        data class Segment(val color: Color, val path: Path, val fillPath: Path, val startX: Float, val endX: Float)
+                        val segments = mutableListOf<Segment>()
+
+                        var currentPath = Path()
+                        var currentColor = getPtColor(pointOffsets[0].second)
+                        var segmentStartX = pointOffsets[0].first.x
+                        var lastOffset = pointOffsets[0].first
+                        var lastPt = pointOffsets[0].second
+                        var pointsInSegment = 0
 
                         pointOffsets.forEachIndexed { idx, (offset, pt) ->
+                            val ptColor = getPtColor(pt)
+                            val isGap = idx > 0 && (pt.timestamp - lastPt.timestamp > 30 * 60 * 1000L)
+                            val isColorChange = ptColor != currentColor
+
                             if (idx == 0) {
-                                path.moveTo(offset.x, offset.y)
-                                segmentStartIdx = idx
-                            } else {
-                                val prevPt = pointOffsets[idx - 1].second
-                                if (pt.timestamp - prevPt.timestamp > 30 * 60 * 1000L) {
-                                    // Segment break (Gap > 30 mins, offline/unavailable)
-                                    path.moveTo(offset.x, offset.y)
-                                    segmentStartIdx = idx
-                                } else {
-                                    path.lineTo(offset.x, offset.y)
+                                currentPath.moveTo(offset.x, offset.y)
+                                pointsInSegment = 1
+                            } else if (isGap || isColorChange) {
+                                // Close current segment if we have points
+                                if (pointsInSegment > 0) {
+                                    val fPath = Path().apply {
+                                        addPath(currentPath)
+                                        lineTo(lastOffset.x, baselineY)
+                                        lineTo(segmentStartX, baselineY)
+                                        close()
+                                    }
+                                    segments.add(Segment(currentColor, currentPath, fPath, segmentStartX, lastOffset.x))
                                 }
-                            }
-
-                            // Abnormal Rapid Drop segment tracking
-                            if (pt.isAbnormalDrop) {
-                                if (activeAbnormalPath == null) {
-                                    activeAbnormalPath = Path().apply { moveTo(offset.x, offset.y) }
-                                } else {
-                                    activeAbnormalPath?.lineTo(offset.x, offset.y)
-                                }
+                                // Start new segment
+                                currentPath = Path().apply { moveTo(offset.x, offset.y) }
+                                currentColor = ptColor
+                                segmentStartX = offset.x
+                                pointsInSegment = 1
                             } else {
-                                activeAbnormalPath?.let { abnormalPaths.add(it) }
-                                activeAbnormalPath = null
+                                currentPath.lineTo(offset.x, offset.y)
+                                pointsInSegment++
                             }
+                            lastOffset = offset
+                            lastPt = pt
                         }
-                        activeAbnormalPath?.let { abnormalPaths.add(it) }
 
-                        // Gradient Fill Under Standard Path
-                        val fillPath = Path().apply {
-                            addPath(path)
-                            val lastX = pointOffsets.last().first.x
-                            val firstX = pointOffsets.first().first.x
-                            val zeroBaselineY = if (metricType.isSigned && minBound < 0f) {
-                                topPad + (1f - ((0f - minBound) / rangeY)) * drawHeight
-                            } else {
-                                height - bottomPad
+                        if (pointsInSegment > 0) {
+                            val fPath = Path().apply {
+                                addPath(currentPath)
+                                lineTo(lastOffset.x, baselineY)
+                                lineTo(segmentStartX, baselineY)
+                                close()
                             }
-                            lineTo(lastX, zeroBaselineY)
-                            lineTo(firstX, zeroBaselineY)
-                            close()
+                            segments.add(Segment(currentColor, currentPath, fPath, segmentStartX, lastOffset.x))
                         }
 
-                        val effectiveLineColor = when {
-                            metricType == NetraMetricType.TEMPERATURE -> Color(0xFFFF9100)
-                            metricType == NetraMetricType.CURRENT || metricType == NetraMetricType.POWER -> positiveColor
-                            else -> lineColor
-                        }
-
-                        drawPath(
-                            path = fillPath,
-                            brush = Brush.verticalGradient(
-                                colors = listOf(effectiveLineColor.copy(alpha = 0.20f), Color.Transparent)
-                            )
-                        )
-
-                        // Main Curve Line
-                        drawPath(
-                            path = path,
-                            color = effectiveLineColor,
-                            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        )
-
-                        // Highlight Abnormal Drop segments in RED
-                        abnormalPaths.forEach { abPath ->
+                        // Draw each segment independently with its exact color
+                        segments.forEach { seg ->
                             drawPath(
-                                path = abPath,
-                                color = abnormalDropColor,
-                                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                path = seg.fillPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(seg.color.copy(alpha = 0.20f), Color.Transparent)
+                                )
+                            )
+                            drawPath(
+                                path = seg.path,
+                                color = seg.color,
+                                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                             )
                         }
 
                         // Latest Point Indicator
                         val latestPt = pointOffsets.last().first
-                        drawCircle(color = effectiveLineColor, radius = 4.dp.toPx(), center = latestPt)
+                        val latestColor = getPtColor(pointOffsets.last().second)
+                        drawCircle(color = latestColor, radius = 4.dp.toPx(), center = latestPt)
                         drawCircle(color = Color.White, radius = 2.dp.toPx(), center = latestPt)
                     }
 

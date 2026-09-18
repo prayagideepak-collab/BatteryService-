@@ -34,6 +34,11 @@ data class AuthoritativeEtaResult(
  */
 object BatteryPredictionEngine {
 
+    private data class BatteryPercentageSample(
+        val timestampMs: Long,
+        val percentage: Int
+    )
+
     @Volatile
     private var lastValidPredictionMs: Long = -1L
     @Volatile
@@ -48,6 +53,7 @@ object BatteryPredictionEngine {
         private set
 
     private val sampleRates = mutableListOf<Float>()
+    private val batteryPercentageSamples = mutableListOf<BatteryPercentageSample>()
 
     private const val MAX_CHARGE_TIME_MS = 8 * 3600 * 1000L
     private const val MAX_DISCHARGE_TIME_MS = 72 * 3600 * 1000L
@@ -135,8 +141,41 @@ object BatteryPredictionEngine {
         lastValidPredictionMs = -1L
         lastPredictionTimestamp = 0L
         sampleRates.clear()
+        batteryPercentageSamples.clear()
         currentConfidence = EtaConfidence.INITIALIZING
         currentSource = EtaSource.UNAVAILABLE
+    }
+
+    /**
+     * Records a real battery percentage observation for measured-rate consumers.
+     * Samples with invalid percentages or non-monotonic timestamps are ignored so
+     * stale sticky broadcasts cannot distort the calculated velocity.
+     */
+    @Synchronized
+    fun recordSample(timestampMs: Long, percentage: Int) {
+        if (timestampMs <= 0L || percentage !in 0..100) return
+
+        val latest = batteryPercentageSamples.lastOrNull()
+        if (latest != null && timestampMs <= latest.timestampMs) return
+
+        batteryPercentageSamples.add(BatteryPercentageSample(timestampMs, percentage))
+        if (batteryPercentageSamples.size > 12) {
+            batteryPercentageSamples.removeAt(0)
+        }
+    }
+
+    /**
+     * Returns the observed percentage velocity in percent per hour when at least
+     * one minute of real telemetry has been collected; otherwise returns null.
+     */
+    @Synchronized
+    fun measuredVelocityPctPerHour(): Float? {
+        val first = batteryPercentageSamples.firstOrNull() ?: return null
+        val last = batteryPercentageSamples.lastOrNull() ?: return null
+        val elapsedMs = last.timestampMs - first.timestampMs
+        if (elapsedMs < 60_000L) return null
+
+        return (last.percentage - first.percentage) * 3_600_000f / elapsedMs
     }
 
     /**

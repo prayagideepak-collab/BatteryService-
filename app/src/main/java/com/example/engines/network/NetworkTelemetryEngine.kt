@@ -72,10 +72,6 @@ data class NetworkTelemetry(
     val isBatteryImpactActive: Boolean = false,
     val batteryImpactMessage: String = "",
 
-    // 7. Graph data (Active internet only)
-    val activeSpeedHistory: List<Double> = emptyList(),
-    val activeLatencyHistory: List<Int> = emptyList(),
-
     // 8. Connection Quality State Engine Fields
     val wifiQuality: String = "DISCONNECTED",
     val internetQuality: String = "DISCONNECTED",
@@ -97,9 +93,6 @@ object NetworkTelemetryEngine {
     // Connection Quality State Engine Tracker
     private var lastWifiQuality: ConnectionQuality = ConnectionQuality.UNAVAILABLE
     private var lastInternetQuality: ConnectionQuality = ConnectionQuality.UNAVAILABLE
-    
-    // Historical limits for active graph
-    private const val MAX_GRAPH_HISTORY = 15
 
     // Dynamic counters
     private var sim1Fluctuations = 0
@@ -318,19 +311,6 @@ object NetworkTelemetryEngine {
             lastWifiQuality = currentWifiQuality
             lastInternetQuality = currentInternetQuality
 
-            val currentSpeedHistory = _telemetry.value.activeSpeedHistory.toMutableList()
-            val currentLatencyHistory = _telemetry.value.activeLatencyHistory.toMutableList()
-
-            if (transport != "NONE" && isInternetValid) {
-                currentSpeedHistory.add(liveSpeed)
-                currentLatencyHistory.add(currentPing)
-                if (currentSpeedHistory.size > MAX_GRAPH_HISTORY) currentSpeedHistory.removeAt(0)
-                if (currentLatencyHistory.size > MAX_GRAPH_HISTORY) currentLatencyHistory.removeAt(0)
-            } else {
-                currentSpeedHistory.clear()
-                currentLatencyHistory.clear()
-            }
-
             val summary = if (isAirplaneModeActive) {
                 "Airplane Mode suspension active."
             } else if (transport == "WIFI") {
@@ -369,8 +349,6 @@ object NetworkTelemetryEngine {
                 isRoaming = safeTel.isRoaming,
                 isBatteryImpactActive = batteryImpact,
                 batteryImpactMessage = batteryImpactMsg,
-                activeSpeedHistory = currentSpeedHistory,
-                activeLatencyHistory = currentLatencyHistory,
                 wifiQuality = currentWifiQuality.name,
                 internetQuality = currentInternetQuality.name,
                 testDegradationActive = _telemetry.value.testDegradationActive

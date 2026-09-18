@@ -244,10 +244,6 @@ class BatteryViewModel(application: Application) : AndroidViewModel(application)
         initialValue = emptyList()
     )
 
-    fun getGraphForWindow(windowMinutes: Int, maxDisplayPoints: Int = 100): com.example.telemetry.GraphWindowResult {
-        return com.example.telemetry.AuthoritativeTelemetryRepository.getGraphWindowResult(windowMinutes, maxDisplayPoints)
-    }
-
     fun ingestLiveTelemetrySample(
         percentage: Int,
         temperature: Float,
@@ -444,19 +440,6 @@ class BatteryViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
-
-    // --- LIVE POWER TELEMETRY HISTORY BUFFERS ---
-    private val _liveVoltageHistory = MutableStateFlow<List<Float>>(emptyList())
-    val liveVoltageHistory: StateFlow<List<Float>> = _liveVoltageHistory.asStateFlow()
-
-    private val _liveCurrentHistory = MutableStateFlow<List<Float>>(emptyList())
-    val liveCurrentHistory: StateFlow<List<Float>> = _liveCurrentHistory.asStateFlow()
-
-    private val _livePowerHistory = MutableStateFlow<List<Float>>(emptyList())
-    val livePowerHistory: StateFlow<List<Float>> = _livePowerHistory.asStateFlow()
-
-    private val _liveTemperatureHistory = MutableStateFlow<List<Float>>(emptyList())
-    val liveTemperatureHistory: StateFlow<List<Float>> = _liveTemperatureHistory.asStateFlow()
 
     private val _connectedBluetoothDevices = MutableStateFlow<List<com.example.service.ConnectedBluetoothDevice>>(emptyList())
     val connectedBluetoothDevices: StateFlow<List<com.example.service.ConnectedBluetoothDevice>> = _connectedBluetoothDevices.asStateFlow()

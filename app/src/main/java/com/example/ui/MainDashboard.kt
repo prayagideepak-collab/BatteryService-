@@ -1137,14 +1137,7 @@ fun MonitorScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // Charging Speed & Session Graph Card
-        ChargingSpeedGraphCard(
-            isCharging = state.isCharging,
-            currentMa = state.currentNow,
-            speedPercentPerHour = state.speed,
-            chargingType = state.chargingType,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+
 
         // Battery Wear & Lifespan Forecast Estimator Card
         BatteryWearEstimatorCard(
@@ -1438,16 +1431,11 @@ fun MonitorScreen(
 
         // 7. Live Telemetry Status
         val authoritativeHistory by viewModel.authoritativeHistory.collectAsStateWithLifecycle(initialValue = emptyList())
-        val graphResult = remember(authoritativeHistory) {
-            viewModel.getGraphForWindow(1)
-        }
 
         // Authoritative Power State derivation
-        val powerState = remember(state.isCharging, state.currentNow, state.percentage, graphResult.powerState) {
+        val powerState = remember(state.isCharging, state.currentNow, state.percentage) {
             when {
                 state.isCharging -> "CHARGING"
-                graphResult.powerState == com.example.telemetry.PowerFlowState.CHARGING -> "CHARGING"
-                graphResult.powerState == com.example.telemetry.PowerFlowState.DISCHARGING -> "DISCHARGING"
                 state.currentNow > 10 -> "CHARGING"
                 state.currentNow < -10 -> "DISCHARGING"
                 state.percentage >= 0 -> "IDLE"
@@ -1531,12 +1519,12 @@ fun MonitorScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.DataUsage, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Data Points: ${graphResult.dataPointsCount}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Data Points: ${authoritativeHistory.size}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.Update, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.width(4.dp))
-                        val lastTs = graphResult.lastUpdateTimestamp
+                        val lastTs = authoritativeHistory.lastOrNull()?.timestamp ?: 0L
                         val lastTimeStr = if (lastTs > 0) android.text.format.DateFormat.format("HH:mm:ss", lastTs).toString() else "N/A"
                         Text("Last Update: $lastTimeStr", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -2994,10 +2982,7 @@ fun IntelligenceScreen(
             }
         }
 
-        // Historical consumption dashboard (Recharts)
-        item {
-            RechartsHistoricalDashboard(sessions = sessions, trendLogs = allTrendLogs)
-        }
+
 
         // Charging session logs
         item {
@@ -3286,68 +3271,7 @@ fun SessionAnalyticsDialog(
                     }
                 }
 
-                // HIGH-FIDELITY SIMULATED TIMELINE GRAPH
-                Column {
-                    Text(
-                        text = "Session Timeline Graph (Live ADC Sensors)",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(130.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                            .border(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                            .padding(10.dp)
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val w = size.width
-                            val h = size.height
 
-                            // Draw subtle grid lines
-                            for (i in 1..3) {
-                                val gridY = h * (i / 4f)
-                                drawLine(
-                                    color = Color.LightGray.copy(alpha = 0.2f),
-                                    start = Offset(0f, gridY),
-                                    end = Offset(w, gridY),
-                                    strokeWidth = 1.dp.toPx()
-                                )
-                            }
-
-                            // Plot actual session transition line from startPercentage to endPercentage
-                            val startP = session.startPercentage
-                            val endP = session.endPercentage ?: session.startPercentage
-                            val startNorm = (startP.coerceIn(0, 100) / 100f)
-                            val endNorm = (endP.coerceIn(0, 100) / 100f)
-                            val yStart = h * (1.0f - startNorm * 0.8f - 0.1f)
-                            val yEnd = h * (1.0f - endNorm * 0.8f - 0.1f)
-
-                            val lineColor = if (session.isDischarge) Color(0xFFFF5722) else Color(0xFF00E676)
-                            drawLine(
-                                color = lineColor,
-                                start = Offset(0f, yStart),
-                                end = Offset(w, yEnd),
-                                strokeWidth = 2.5.dp.toPx(),
-                                cap = StrokeCap.Round
-                            )
-                            drawCircle(color = lineColor, radius = 4.dp.toPx(), center = Offset(0f, yStart))
-                            drawCircle(color = lineColor, radius = 4.dp.toPx(), center = Offset(w, yEnd))
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Start: ${session.startPercentage}%", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Delta: ${kotlin.math.abs(session.startPercentage - (session.endPercentage ?: session.startPercentage))}%", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("End: ${session.endPercentage ?: session.startPercentage}%", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
 
                 // INDEXES & HEALTH WEAR ANALYSIS
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

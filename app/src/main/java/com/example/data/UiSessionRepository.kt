@@ -20,7 +20,6 @@ data class UiSessionState(
     val intelligenceActiveDialog: String = "",
     val notificationSearchQuery: String = "",
     val notificationSelectedProfile: String = "Default",
-    val graphTimeRange: Int = 24,
     val lastStateSavedAt: Long = 0L
 )
 
@@ -56,7 +55,6 @@ object UiSessionRepository {
             intelligenceActiveDialog = prefs.getString("intelligenceActiveDialog", "") ?: "",
             notificationSearchQuery = prefs.getString("notificationSearchQuery", "") ?: "",
             notificationSelectedProfile = prefs.getString("notificationSelectedProfile", "Default") ?: "Default",
-            graphTimeRange = prefs.getInt("graphTimeRange", 24),
             lastStateSavedAt = prefs.getLong("lastStateSavedAt", 0L)
         )
         
@@ -90,7 +88,6 @@ object UiSessionRepository {
             putString("intelligenceActiveDialog", state.intelligenceActiveDialog)
             putString("notificationSearchQuery", state.notificationSearchQuery)
             putString("notificationSelectedProfile", state.notificationSelectedProfile)
-            putInt("graphTimeRange", state.graphTimeRange)
             putLong("lastStateSavedAt", state.lastStateSavedAt)
             apply()
         }

@@ -350,27 +350,7 @@ fun NetraIntelligenceCenter(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        RadarChart(
-                            data = listOf(
-                                state.healthPercentage.toFloat(),
-                                if (state.temperature <= -999f) 0f else if (state.temperature < 35f) 100f else if (state.temperature < 40f) 85f else 60f,
-                                perfScore.toFloat(),
-                                if (networkTelemetry.isConnected) (if (networkTelemetry.isInternetValidated) 100f else 80f) else 20f,
-                                if (state.temperature <= -999f) 0f else if (state.temperature < 40f) 95f else 70f,
-                                availablePercent.toFloat()
-                            ),
-                            labels = listOf("Health", "Thermal", "Perf", "Network", "Safety", "Storage"),
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -478,36 +458,23 @@ fun NetraIntelligenceCenter(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // LineChart with strict Data Integrity Rule
-                    if (batteryPoints.size >= 2) {
-                        Box(
+                    // Honest Placeholder
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            LineChart(data = batteryPoints, color = Color(0xFF00C853), label = "${state.percentage}%")
-                        }
-                    } else {
-                        // Honest Placeholder when insufficient history exists
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(100.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(Icons.Outlined.Timeline, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text("Collecting Battery Trend Data", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                Text("Requires at least 2 historical samples. Current samples logged: $totalSamplesCount", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                            }
+                            Text("Battery Discharge & Runtime Audit Active", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text("Current samples logged: $totalSamplesCount", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                         }
                     }
 
@@ -571,34 +538,22 @@ fun NetraIntelligenceCenter(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    if (tempPoints.size >= 2) {
-                        Box(
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            LineChart(data = tempPoints, color = Color(0xFFE53935), label = if (state.temperature > -999f) "${state.temperature}°C" else "Unavailable", isCurve = true)
-                        }
-                    } else {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(100.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(Icons.Outlined.Thermostat, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text("Collecting Thermal Telemetry", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                Text("Single sample recorded (${if (state.temperature > -999f) "${state.temperature}°C" else "Unavailable"}). Historical graph requires additional sample points.", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                            }
+                            Text("Thermal Monitoring Active", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text("Current: ${if (state.temperature > -999f) "${state.temperature}°C" else "Unavailable"}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                         }
                     }
 
@@ -991,27 +946,12 @@ fun NetraIntelligenceCenter(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(110.dp)
+                            .height(60.dp)
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                            .padding(8.dp)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (networkTelemetry.activeSpeedHistory.size >= 2) {
-                            LineChart(
-                                data = networkTelemetry.activeSpeedHistory.map { it.toFloat() },
-                                color = MaterialTheme.colorScheme.primary,
-                                label = "Active Transport (${networkTelemetry.transportType}) Speed history"
-                            )
-                        } else {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(Icons.Outlined.Timeline, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("Awaiting Internet Traffic", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
+                        Text("Active Internet Traffic Monitor Active", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -2069,130 +2009,7 @@ fun SecurityItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: S
     }
 }
 
-@Composable
-fun LineChart(data: List<Float>, color: Color, label: String, isCurve: Boolean = false) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val max = data.maxOrNull() ?: 100f
-        val min = (data.minOrNull() ?: 0f) * 0.8f
-        val range = if (max == min) 1f else max - min
-        val stepX = if (data.size > 1) size.width / (data.size - 1) else size.width
 
-        val isSpeedChart = label.contains("Speed", ignoreCase = true)
-        fun getSpeedColor(speed: Float): Color {
-            val qual = ConnectionQualityEngine.getInternetQuality(isConnected = true, isInternetAvailable = true, speedMbps = speed.toDouble(), latencyMs = 30)
-            return Color(qual.colorHex)
-        }
-
-        val path = Path()
-        data.forEachIndexed { index, value ->
-            val x = index * stepX
-            val y = size.height - ((value - min) / range * size.height)
-            if (index == 0) {
-                path.moveTo(x, y)
-            } else {
-                if (isCurve) {
-                    val prevX = (index - 1) * stepX
-                    val prevY = size.height - ((data[index - 1] - min) / range * size.height)
-                    val controlX = (prevX + x) / 2
-                    path.cubicTo(controlX, prevY, controlX, y, x, y)
-                } else {
-                    path.lineTo(x, y)
-                }
-            }
-
-            if (index == data.size - 1) {
-                val dotColor = if (isSpeedChart) getSpeedColor(value) else color
-                drawCircle(color = dotColor, radius = 4.dp.toPx(), center = Offset(x, y))
-            }
-        }
-
-        if (isSpeedChart && data.size >= 2) {
-            for (index in 1 until data.size) {
-                val prevX = (index - 1) * stepX
-                val prevVal = data[index - 1]
-                val prevY = size.height - ((prevVal - min) / range * size.height)
-
-                val x = index * stepX
-                val valCurr = data[index]
-                val y = size.height - ((valCurr - min) / range * size.height)
-
-                val segmentColor = getSpeedColor(valCurr)
-
-                drawLine(
-                    color = segmentColor,
-                    start = Offset(prevX, prevY),
-                    end = Offset(x, y),
-                    strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
-            }
-        } else {
-            drawPath(path = path, color = color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
-        }
-
-        val fillPath = Path().apply {
-            addPath(path)
-            lineTo(size.width, size.height)
-            lineTo(0f, size.height)
-            close()
-        }
-        val latestColor = if (isSpeedChart && data.isNotEmpty()) getSpeedColor(data.last()) else color
-        drawPath(
-            path = fillPath,
-            brush = Brush.verticalGradient(colors = listOf(latestColor.copy(alpha = 0.2f), Color.Transparent))
-        )
-    }
-}
-
-@Composable
-fun RadarChart(
-    data: List<Float>,
-    labels: List<String>,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        val radius = size.minDimension / 2f
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val sides = data.size
-        val angleStep = (2 * Math.PI) / sides
-
-        val rings = 3
-        val webColor = Color.LightGray.copy(alpha = 0.4f)
-        for (i in 1..rings) {
-            val r = radius * (i.toFloat() / rings)
-            val path = Path()
-            for (j in 0 until sides) {
-                val angle = j * angleStep - Math.PI / 2
-                val x = center.x + (r * cos(angle)).toFloat()
-                val y = center.y + (r * sin(angle)).toFloat()
-                if (j == 0) path.moveTo(x, y) else path.lineTo(x, y)
-
-                if (i == rings) {
-                    drawLine(color = webColor, start = center, end = Offset(x, y), strokeWidth = 1f)
-                }
-            }
-            path.close()
-            drawPath(path, color = webColor, style = Stroke(width = 1f))
-        }
-
-        val dataPath = Path()
-        val primaryColor = Color(0xFF00C853)
-        for (j in 0 until sides) {
-            val angle = j * angleStep - Math.PI / 2
-            val value = data[j].coerceIn(0f, 100f) / 100f
-            val r = radius * value
-            val x = center.x + (r * cos(angle)).toFloat()
-            val y = center.y + (r * sin(angle)).toFloat()
-
-            if (j == 0) dataPath.moveTo(x, y) else dataPath.lineTo(x, y)
-            drawCircle(color = primaryColor, radius = 3.dp.toPx(), center = Offset(x, y))
-        }
-        dataPath.close()
-
-        drawPath(dataPath, color = primaryColor.copy(alpha = 0.2f))
-        drawPath(dataPath, color = primaryColor, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
-    }
-}
 
 @Composable
 fun DeviceChargingIntelligencePanel(

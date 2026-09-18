@@ -1032,169 +1032,7 @@ fun UsbTelemetryCard(record: CanonicalDeviceRecord) {
     }
 }
 
-// --- SMOOTH CONTROLLED TELEMETRY GRAPH ENGINE ---
-@Composable
-fun SmoothControlledTelemetryGraph(
-    rawSamples: List<Float>,
-    timeWindow: String,
-    minValue: Float,
-    maxValue: Float,
-    defaultLineColor: Color,
-    gradientFillColor: Color? = null,
-    strokeWidthDp: Dp = 2.dp,
-    emptyMessage: String = "Telemetry unavailable",
-    colorSelector: ((Float) -> Color)? = null,
-    modifier: Modifier = Modifier
-) {
-    val animDurationMs = when (timeWindow) {
-        "5 MIN" -> 850
-        "10 MIN" -> 900
-        "24 HR" -> 1000
-        else -> 800 // 1 MIN
-    }
 
-    val targetPoints = remember(rawSamples, timeWindow) {
-        if (rawSamples.isEmpty()) emptyList()
-        else {
-            when (timeWindow) {
-                "5 MIN" -> {
-                    val count = 12
-                    val step = (rawSamples.size.toFloat() / count).coerceAtLeast(1f)
-                    val result = mutableListOf<Float>()
-                    for (i in 0 until count) {
-                        val idx = (i * step).toInt().coerceIn(0, rawSamples.lastIndex)
-                        result.add(rawSamples[idx])
-                    }
-                    result
-                }
-                "10 MIN" -> {
-                    val count = 8
-                    val step = (rawSamples.size.toFloat() / count).coerceAtLeast(1f)
-                    val result = mutableListOf<Float>()
-                    for (i in 0 until count) {
-                        val idx = (i * step).toInt().coerceIn(0, rawSamples.lastIndex)
-                        result.add(rawSamples[idx])
-                    }
-                    result
-                }
-                "24 HR" -> {
-                    val count = 5
-                    val step = (rawSamples.size.toFloat() / count).coerceAtLeast(1f)
-                    val result = mutableListOf<Float>()
-                    for (i in 0 until count) {
-                        val idx = (i * step).toInt().coerceIn(0, rawSamples.lastIndex)
-                        result.add(rawSamples[idx])
-                    }
-                    result
-                }
-                else -> rawSamples.takeLast(24) // 1 MIN high-res recent window
-            }
-        }
-    }
-
-    var prevPoints by remember { mutableStateOf<List<Float>>(emptyList()) }
-    var currentPoints by remember { mutableStateOf<List<Float>>(emptyList()) }
-    val animProgress = remember { Animatable(1f) }
-
-    LaunchedEffect(targetPoints) {
-        if (targetPoints.isNotEmpty()) {
-            prevPoints = if (currentPoints.isNotEmpty()) currentPoints else targetPoints
-            currentPoints = targetPoints
-            animProgress.snapTo(0f)
-            animProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = animDurationMs, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
-            )
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(80.dp)
-            .background(Color(0xFF0B0D15), RoundedCornerShape(6.dp))
-            .padding(6.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (currentPoints.isNotEmpty()) {
-            val progress = animProgress.value
-            val range = (maxValue - minValue).coerceAtLeast(1f)
-
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val width = size.width
-                val height = size.height
-                val totalPoints = currentPoints.size
-                val stepX = if (totalPoints > 1) width / (totalPoints - 1).toFloat() else width
-
-                val interpolatedYValues = FloatArray(totalPoints)
-                for (i in 0 until totalPoints) {
-                    val currVal = currentPoints[i]
-                    val prevVal = if (i < prevPoints.size) prevPoints[i] else currVal
-                    val blendedVal = prevVal + (currVal - prevVal) * progress
-
-                    val ratio = (blendedVal - minValue) / range
-                    interpolatedYValues[i] = height - (ratio * height).coerceIn(0f, height)
-                }
-
-                val path = Path()
-                for (i in 0 until totalPoints) {
-                    val x = i * stepX
-                    val y = interpolatedYValues[i]
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-
-                // Gradient fill if enabled
-                gradientFillColor?.let { fillCol ->
-                    val fillPath = Path().apply {
-                        addPath(path)
-                        lineTo((totalPoints - 1) * stepX, height)
-                        lineTo(0f, height)
-                        close()
-                    }
-                    drawPath(
-                        path = fillPath,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(fillCol.copy(alpha = 0.15f), Color.Transparent)
-                        )
-                    )
-                }
-
-                // Stroke drawing with smooth segment interpolation
-                if (totalPoints >= 2) {
-                    for (i in 1 until totalPoints) {
-                        val prevX = (i - 1) * stepX
-                        val prevY = interpolatedYValues[i - 1]
-                        val x = i * stepX
-                        val y = interpolatedYValues[i]
-
-                        val segmentColor = if (colorSelector != null) {
-                            colorSelector(currentPoints[i])
-                        } else {
-                            defaultLineColor
-                        }
-
-                        drawLine(
-                            color = segmentColor,
-                            start = Offset(prevX, prevY),
-                            end = Offset(x, y),
-                            strokeWidth = strokeWidthDp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                } else if (totalPoints == 1) {
-                    val dotColor = if (colorSelector != null) colorSelector(currentPoints[0]) else defaultLineColor
-                    drawCircle(color = dotColor, radius = 4.dp.toPx(), center = Offset(0f, interpolatedYValues[0]))
-                }
-            }
-        } else {
-            Text(
-                text = emptyMessage,
-                color = Color.Gray,
-                fontSize = 10.sp
-            )
-        }
-    }
-}
 
 // --- CANONICAL DEVICE LIVE GRAPH CARD ---
 @Composable
@@ -1311,33 +1149,11 @@ fun DeviceLiveGraphCard(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    SmoothControlledTelemetryGraph(
-                        rawSamples = samples,
-                        timeWindow = selectedTimeWindow,
-                        minValue = -100f,
-                        maxValue = -30f,
-                        defaultLineColor = Color(0xFF00FFCC),
-                        gradientFillColor = Color(0xFF00FFCC),
-                        emptyMessage = "Telemetry unavailable",
-                        colorSelector = { value ->
-                            if (isConnected) {
-                                val qual = if (isWifi) {
-                                    ConnectionQualityEngine.getWifiQuality(isConnected = true, signalPercent = ((value - (-100)) * 100 / (-30 - (-100))).toInt().coerceIn(0, 100))
-                                } else {
-                                    ConnectionQualityEngine.getBluetoothQuality(isEnabled = true, isConnected = true, rssi = value.toInt())
-                                }
-                                Color(qual.colorHex)
-                            } else {
-                                Color.Red.copy(alpha = 0.5f)
-                            }
-                        }
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
             }
 
-            // 2. BATTERY CARD (Independent — ONLY if physical telemetry exists, else N/A & no fake graph)
+            // 2. BATTERY CARD (Independent — ONLY if physical telemetry exists)
             if (!isWifi) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Card(
@@ -1365,19 +1181,6 @@ fun DeviceLiveGraphCard(
                                 text = if (batteryLevel >= 0) "Supported" else "No Device Battery Feed",
                                 fontSize = 9.sp,
                                 color = if (batteryLevel >= 0) Color(0xFFFF9800) else Color.Gray
-                            )
-                        }
-
-                        if (batteryLevel >= 0) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            SmoothControlledTelemetryGraph(
-                                rawSamples = batterySamples.filter { it >= 0f },
-                                timeWindow = selectedTimeWindow,
-                                minValue = 0f,
-                                maxValue = 100f,
-                                defaultLineColor = Color(0xFFFF9800),
-                                gradientFillColor = Color(0xFFFF9800),
-                                emptyMessage = "Collecting battery telemetry..."
                             )
                         }
                     }
@@ -1600,22 +1403,14 @@ fun LiveNetworkIntelligenceSection(
                             color = Color(0xFF2979FF)
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    SmoothControlledTelemetryGraph(
-                        rawSamples = if (safeNet.isInternetAvailable) dlHistory else emptyList(),
-                        timeWindow = "1 MIN",
-                        minValue = 0f,
-                        maxValue = (maxDl.coerceAtLeast(1f)),
-                        defaultLineColor = Color(0xFF2979FF),
-                        gradientFillColor = Color(0xFF2979FF),
-                        emptyMessage = if (safeNet.isInternetAvailable) "Monitoring download throughput..." else "No active download traffic"
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Download monitor active", fontSize = 10.sp, color = Color.Gray)
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 2. UPLOAD THROUGHPUT GRAPH
+            // 2. UPLOAD THROUGHPUT
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF161824)),
@@ -1635,22 +1430,14 @@ fun LiveNetworkIntelligenceSection(
                             color = Color(0xFFFF9100)
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    SmoothControlledTelemetryGraph(
-                        rawSamples = if (safeNet.isInternetAvailable) ulHistory else emptyList(),
-                        timeWindow = "1 MIN",
-                        minValue = 0f,
-                        maxValue = (maxUl.coerceAtLeast(1f)),
-                        defaultLineColor = Color(0xFFFF9100),
-                        gradientFillColor = Color(0xFFFF9100),
-                        emptyMessage = if (safeNet.isInternetAvailable) "Monitoring upload throughput..." else "No active upload traffic"
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Upload monitor active", fontSize = 10.sp, color = Color.Gray)
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 3. CONNECTION QUALITY GRAPH
+            // 3. CONNECTION QUALITY
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF161824)),
@@ -1670,16 +1457,8 @@ fun LiveNetworkIntelligenceSection(
                             color = Color(0xFF00FFCC)
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    SmoothControlledTelemetryGraph(
-                        rawSamples = connHistory,
-                        timeWindow = "1 MIN",
-                        minValue = 0f,
-                        maxValue = 100f,
-                        defaultLineColor = Color(0xFF00FFCC),
-                        gradientFillColor = Color(0xFF00FFCC),
-                        emptyMessage = "Sampling connection quality..."
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Stability monitoring active", fontSize = 10.sp, color = Color.Gray)
                 }
             }
         }

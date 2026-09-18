@@ -43,10 +43,6 @@ fun DashboardSection(
 ) {
     val context = LocalContext.current
     val state by viewModel.sanitizedBatteryState.collectAsStateWithLifecycle()
-    val voltageHistory by viewModel.liveVoltageHistory.collectAsStateWithLifecycle()
-    val currentHistory by viewModel.liveCurrentHistory.collectAsStateWithLifecycle()
-    val powerHistory by viewModel.livePowerHistory.collectAsStateWithLifecycle()
-    val tempHistory by viewModel.liveTemperatureHistory.collectAsStateWithLifecycle()
     val systemStatus by viewModel.systemStatus.collectAsStateWithLifecycle()
     val syncState by viewModel.universalSyncState.collectAsStateWithLifecycle()
 
@@ -240,7 +236,7 @@ fun DashboardSection(
 
                 val voltSubtitle = if (state.voltage > 4300) "High Voltage" else if (state.voltage < 3500) "Low Voltage" else "Nominal Range (3.7-4.2V)"
 
-                LiveTelemetryCard(
+                 LiveTelemetryCard(
                     title = "VOLTAGE",
                     value = voltDisplay,
                     subtitle = voltSubtitle,
@@ -248,14 +244,8 @@ fun DashboardSection(
                     badgeColor = MaterialTheme.colorScheme.primary,
                     icon = Icons.Outlined.Speed,
                     modifier = Modifier.weight(1f),
-                    onClick = { selectedMetricDialog = "VOLTAGE" }
-                ) {
-                    StandardTelemetryMicroGraph(
-                        points = voltageHistory,
-                        unitLabel = "V",
-                        lineColor = MaterialTheme.colorScheme.primary
-                    )
-                }
+                    onClick = {}
+                )
 
                 // Temperature Card
                 val tempDisplay = if (state.temperature > -999f) {
@@ -283,22 +273,16 @@ fun DashboardSection(
                     badgeColor = tempBadgeColor,
                     icon = Icons.Outlined.Thermostat,
                     modifier = Modifier.weight(1f),
-                    onClick = { selectedMetricDialog = "TEMPERATURE" }
-                ) {
-                    StandardTelemetryMicroGraph(
-                        points = tempHistory,
-                        unitLabel = "°C",
-                        lineColor = tempBadgeColor
-                    )
-                }
+                    onClick = {}
+                )
             }
 
-            // Row 2: Current (Zero-Line) & Power (Zero-Line)
+            // Row 2: Current & Power
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Current Card (Zero-Line Graph)
+                // Current Card
                 val isCharging = state.isCharging
                 val currentDisplay = if (state.currentNow != 0) {
                     val sign = if (isCharging) "+" else "-"
@@ -320,17 +304,10 @@ fun DashboardSection(
                     valueColor = if (isCharging) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Outlined.ElectricMeter,
                     modifier = Modifier.weight(1f),
-                    onClick = { selectedMetricDialog = "CURRENT" }
-                ) {
-                    ZeroLineTelemetryMicroGraph(
-                        points = currentHistory,
-                        unitLabel = "mA",
-                        positiveColor = Color(0xFF00E676),
-                        negativeColor = Color(0xFFFF5252)
-                    )
-                }
+                    onClick = {}
+                )
 
-                // Power Card (Zero-Line Graph)
+                // Power Card
                 val powerWattVal = if (state.powerWatt > 0.01f) {
                     state.powerWatt
                 } else {
@@ -351,15 +328,8 @@ fun DashboardSection(
                     valueColor = if (isCharging) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Outlined.Bolt,
                     modifier = Modifier.weight(1f),
-                    onClick = { selectedMetricDialog = "POWER" }
-                ) {
-                    ZeroLineTelemetryMicroGraph(
-                        points = powerHistory,
-                        unitLabel = "W",
-                        positiveColor = Color(0xFF00E676),
-                        negativeColor = Color(0xFFFFAB00)
-                    )
-                }
+                    onClick = {}
+                )
             }
         }
 
@@ -441,41 +411,6 @@ fun DashboardSection(
             }
         }
     }
-
-    // Modal Inspection Full-Screen Dialog with Unified Graph System
-    selectedMetricDialog?.let { metricName ->
-        val metricType = when (metricName) {
-            "VOLTAGE" -> NetraMetricType.VOLTAGE
-            "TEMPERATURE" -> NetraMetricType.TEMPERATURE
-            "CURRENT" -> NetraMetricType.CURRENT
-            "POWER" -> NetraMetricType.POWER
-            else -> NetraMetricType.BATTERY_LEVEL
-        }
-
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { selectedMetricDialog = null },
-            properties = androidx.compose.ui.window.DialogProperties(
-                usePlatformDefaultWidth = false
-            )
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                NetraUnifiedMetricScreen(
-                    metricType = metricType,
-                    state = state,
-                    history24h = history24h,
-                    trendLogs = trendLogs,
-                    selectedCalendarDate = selectedCalendarDate,
-                    onPreviousDay = { viewModel.selectPreviousDay() },
-                    onNextDay = { viewModel.selectNextDay() },
-                    onToday = { viewModel.selectToday() },
-                    onClose = { selectedMetricDialog = null }
-                )
-            }
-        }
-    }
 }
 
 @Composable
@@ -504,5 +439,113 @@ private fun HealthSubMetric(
             fontSize = 9.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
         )
+    }
+}
+
+@Composable
+fun LiveCircularBatteryHeroGauge(
+    state: com.example.service.BatteryState,
+    liveTimeRemainingStr: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(20.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "${state.percentage}%",
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (state.isCharging) "Charging (${state.chargingType})" else "Discharging",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = liveTimeRemainingStr,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+fun LiveTelemetryCard(
+    title: String,
+    value: String,
+    subtitle: String,
+    badgeText: String,
+    badgeColor: Color,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(14.dp)
+                .fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = badgeColor,
+                    modifier = Modifier.size(20.dp)
+                )
+                Surface(
+                    color = badgeColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = badgeText,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = badgeColor
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = title,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = value,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = valueColor
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

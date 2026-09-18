@@ -194,7 +194,13 @@ class BatteryViewModel(application: Application) : AndroidViewModel(application)
         com.example.telemetry.AuthoritativeTelemetryRepository.liveSample
 
     val authoritativeHistory: StateFlow<List<com.example.telemetry.AuthoritativeTelemetrySample>> =
-        com.example.telemetry.AuthoritativeTelemetryRepository.historicalSamples
+        com.example.telemetry.AuthoritativeTelemetryRepository.liveSample
+            .map { listOfNotNull(it) }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList()
+            )
 
     // --- CALENDAR-DAY 24-HOUR SELECTION & TELEMETRY PIPELINE ---
     private val _selectedCalendarDate = MutableStateFlow<Long>(com.example.util.TimeManager.getStartOfLocalDay())
@@ -553,15 +559,6 @@ class BatteryViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
             loadNetraConnectedDevices()
-        }
-
-        // Seed AuthoritativeTelemetryRepository from persisted Room logs on launch
-        viewModelScope.launch {
-            allTrendLogs.collect { logs ->
-                if (logs.isNotEmpty()) {
-                    com.example.telemetry.AuthoritativeTelemetryRepository.seedFromPersistedLogs(logs)
-                }
-            }
         }
 
 

@@ -319,7 +319,7 @@ fun NetraIntelligenceCenter(
             )
         }
 
-        // 2. System Intelligence (Radar Chart & Telemetry Status)
+        // 2. System Intelligence & Telemetry Status
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

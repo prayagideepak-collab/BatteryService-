@@ -136,7 +136,7 @@ fun NetraWidgetsSimulation(
                     features = listOf(
                         Icons.Filled.Power to "All Medium Data",
                         Icons.Filled.BatteryChargingFull to "Charge Rate & Source",
-                        Icons.Filled.ShowChart to "Battery Usage Graph (Live)",
+                        Icons.Filled.Timeline to "Live Battery Status",
                         Icons.Filled.Watch to "Connected Devices",
                         Icons.Filled.Security to "Sensors & Security Status"
                     ),
@@ -155,7 +155,7 @@ fun NetraWidgetsSimulation(
                         Icons.Filled.Headset to "Connected Devices Battery",
                         Icons.Filled.Eco to "Battery Saver Status",
                         Icons.Filled.VerifiedUser to "System Status",
-                        Icons.Filled.QueryStats to "Live Graph & Real-time Updates"
+                        Icons.Filled.Speed to "Real-time Telemetry Updates"
                     ),
                     primaryColor = primaryColor
                 )

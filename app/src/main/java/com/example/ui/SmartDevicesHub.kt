@@ -934,7 +934,7 @@ fun CanonicalUsbCard(
     }
 }
 
-// --- USB TELEMETRY PLOT CARD ---
+// --- USB TELEMETRY HARDWARE CARD ---
 @Composable
 fun UsbTelemetryCard(record: CanonicalDeviceRecord) {
     Card(

@@ -9,10 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentLinkedDeque
 import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
 
 enum class PowerFlowState {
     CHARGING,
@@ -34,16 +31,9 @@ data class AuthoritativeTelemetrySample(
 
 object AuthoritativeTelemetryRepository {
     private const val TAG = "AuthTelemetryRepo"
-    private const val MAX_RETENTION_MS = 3600_000L * 2 // Retain 2 hours of live buffer
-    private const val MAX_SAMPLES_BUFFER = 12000
-
-    private val sampleBuffer = ConcurrentLinkedDeque<AuthoritativeTelemetrySample>()
 
     private val _liveSample = MutableStateFlow<AuthoritativeTelemetrySample?>(null)
     val liveSample: StateFlow<AuthoritativeTelemetrySample?> = _liveSample.asStateFlow()
-
-    private val _historicalSamples = MutableStateFlow<List<AuthoritativeTelemetrySample>>(emptyList())
-    val historicalSamples: StateFlow<List<AuthoritativeTelemetrySample>> = _historicalSamples.asStateFlow()
 
     private var lastPersistedTimestamp = 0L
     private var lastPersistedPercentage = -1
@@ -59,7 +49,7 @@ object AuthoritativeTelemetryRepository {
     ): AuthoritativeTelemetrySample? {
         if (timestamp <= 0L) return null
 
-        // Data Validation (Requirement 12)
+        // Data Validation
         if (rawPercentage < 0 || rawPercentage > 100) return null
         if (rawTemperature.isNaN() || rawTemperature.isInfinite() || rawTemperature < -40f || rawTemperature > 85f) return null
         if (rawVoltageMv <= 0 || rawVoltageMv > 10000) return null
@@ -70,7 +60,7 @@ object AuthoritativeTelemetryRepository {
         val voltMv = rawVoltageMv
         val voltV = voltMv / 1000f
 
-        // Signed current & power flow derivation (Requirement 13)
+        // Signed current & power flow derivation
         var currMa = rawCurrentMa
         if (isCharging && currMa < 0) {
             currMa = -currMa
@@ -98,73 +88,8 @@ object AuthoritativeTelemetryRepository {
             powerState = powerState
         )
 
-        // Deduplication & rapid jitter control (Requirement 18)
-        val last = sampleBuffer.peekLast()
-        if (last != null && timestamp - last.timestamp < 150L) {
-            // Drop sub-150ms exact jitter duplicate unless values shifted meaningfully
-            val isDiff = abs(last.batteryLevel - newSample.batteryLevel) >= 0.1f ||
-                    abs(last.temperature - newSample.temperature) >= 0.2f ||
-                    abs(last.voltageMv - newSample.voltageMv) >= 20 ||
-                    abs(last.currentMa - newSample.currentMa) >= 50
-            if (!isDiff) return last
-        }
-
-        sampleBuffer.addLast(newSample)
-
-        // Prune older than retention window
-        val cutoff = timestamp - MAX_RETENTION_MS
-        while (sampleBuffer.isNotEmpty() && (sampleBuffer.peekFirst()?.timestamp ?: Long.MAX_VALUE) < cutoff) {
-            sampleBuffer.pollFirst()
-        }
-        while (sampleBuffer.size > MAX_SAMPLES_BUFFER) {
-            sampleBuffer.pollFirst()
-        }
-
-        val listSnapshot = sampleBuffer.toList()
         _liveSample.value = newSample
-        _historicalSamples.value = listSnapshot
-
         return newSample
-    }
-
-    fun seedFromPersistedLogs(logs: List<BatteryTrendLog>) {
-        if (logs.isEmpty()) return
-        val now = System.currentTimeMillis()
-        val cutoff = now - MAX_RETENTION_MS
-        val validRecent = logs.filter { it.timestamp in cutoff..now && it.batteryLevel in 0..100 }
-            .sortedBy { it.timestamp }
-
-        if (validRecent.isEmpty()) return
-
-        synchronized(this) {
-            if (sampleBuffer.size < 2) {
-                sampleBuffer.clear()
-                for (log in validRecent) {
-                    val voltMv = if (log.voltage > 0) log.voltage else 4000
-                    val voltV = voltMv / 1000f
-                    val curr = log.currentNow
-                    val isCharging = log.dischargeRate == 0f && curr >= 0
-                    val powerState = if (isCharging || curr > 15) PowerFlowState.CHARGING else if (curr < -15) PowerFlowState.DISCHARGING else PowerFlowState.IDLE
-                    sampleBuffer.addLast(
-                        AuthoritativeTelemetrySample(
-                            timestamp = log.timestamp,
-                            batteryLevel = log.batteryLevel.toFloat(),
-                            temperature = if (log.temperature > -900f) log.temperature else 25f,
-                            voltageMv = voltMv,
-                            voltageV = voltV,
-                            currentMa = curr,
-                            powerWatt = voltV * (abs(curr) / 1000f),
-                            powerState = powerState
-                        )
-                    )
-                }
-                val snapshot = sampleBuffer.toList()
-                if (snapshot.isNotEmpty()) {
-                    _liveSample.value = snapshot.last()
-                    _historicalSamples.value = snapshot
-                }
-            }
-        }
     }
 
     fun maybePersistToRoom(repository: BatteryRepository, scope: CoroutineScope) {

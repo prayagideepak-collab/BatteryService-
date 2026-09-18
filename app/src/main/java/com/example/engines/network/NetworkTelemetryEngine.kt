@@ -264,13 +264,22 @@ object NetworkTelemetryEngine {
             val isInternetValid = !isAirplaneModeActive && safeNet.isInternetAvailable
             AuthoritativeNetworkLogger.onInternetAccessStateChanged(appContext, isInternetValid, transport)
 
-            // Deterministic metrics without synthetic random noise
+            // Real measured link capabilities where available from NetworkCapabilities or 0.0 / Unavailable
+            val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val activeNet = cm?.activeNetwork
+            val caps = if (activeNet != null) cm.getNetworkCapabilities(activeNet) else null
+
             val liveSpeed = when (transport) {
-                "WIFI" -> if (isInternetValid) 150.0 else 0.0
-                "CELLULAR" -> if (isInternetValid) 45.0 else 0.0
+                "WIFI", "CELLULAR" -> {
+                    val downstreamKbps = caps?.linkDownstreamBandwidthKbps ?: 0
+                    if (downstreamKbps > 0) downstreamKbps / 1000.0 else 0.0
+                }
                 else -> 0.0
             }
-            val liveUpload = if (liveSpeed > 0) liveSpeed * 0.3 else 0.0
+            val liveUpload = if (liveSpeed > 0) {
+                val upstreamKbps = caps?.linkUpstreamBandwidthKbps ?: 0
+                if (upstreamKbps > 0) upstreamKbps / 1000.0 else liveSpeed * 0.3
+            } else 0.0
 
             val highSpeedActive = liveSpeed > 50.0
             if (highSpeedActive != lastHeavyUsage) {
@@ -294,9 +303,7 @@ object NetworkTelemetryEngine {
                 "Critical Battery-Impact Pattern identified! Weak signal coupled with heavy data transfer."
             } else ""
 
-            val currentPing = if (isInternetValid) {
-                if (transport == "WIFI") 25 else 70
-            } else -1
+            val currentPing = if (isInternetValid) _telemetry.value.pingMs else -1
 
             val stability = when {
                 !isInternetValid -> "UNAVAILABLE"

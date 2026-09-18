@@ -427,7 +427,7 @@ fun NetraUnifiedGraphCanvas(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (is24h) "No telemetry recorded for this date." else "Awaiting telemetry stream...",
+                        text = if (is24h) "No telemetry recorded for this rolling 24h window." else "Awaiting telemetry stream...",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

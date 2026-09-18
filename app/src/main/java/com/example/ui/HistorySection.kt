@@ -53,8 +53,9 @@ fun HistorySection(viewModel: BatteryViewModel) {
         val is24h = selectedRange == NetraTimeRange.TWENTY_FOUR_HOURS
 
         if (is24h) {
-            val startMs = TimeManager.getStartOfLocalDay(selectedCalendarDate)
-            val endMs = TimeManager.getEndOfLocalDay(selectedCalendarDate)
+            val now = System.currentTimeMillis()
+            val startMs = now - NetraTimeRange.TWENTY_FOUR_HOURS.durationMs
+            val endMs = now
             val dateHistory = history24h.filter { it.timestamp in startMs..endMs }.sortedBy { it.timestamp }
 
             var prevLevel: Int? = null

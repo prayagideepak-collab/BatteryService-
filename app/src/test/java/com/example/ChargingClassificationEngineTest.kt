@@ -27,6 +27,7 @@ class ChargingClassificationEngineTest {
     @Test
     fun testNetPowerScenarios() {
         // Input 30W + consumption 8W = net 22W = FAST
+        ChargingClassificationEngine.clearSession()
         val r1 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 30.0f, phoneConsumptionPowerWatt = 8.0f)
         )
@@ -35,6 +36,7 @@ class ChargingClassificationEngineTest {
         assertEquals(DataQuality.VALID, r1.dataQuality)
 
         // Input 30W + consumption 25W = net 5W = NORMAL
+        ChargingClassificationEngine.clearSession()
         val r2 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 30.0f, phoneConsumptionPowerWatt = 25.0f)
         )
@@ -42,6 +44,7 @@ class ChargingClassificationEngineTest {
         assertEquals(5.0f, r2.netPowerW!!, 0.01f)
 
         // Input 40W + consumption 5W = net 35W = ULTRA FAST
+        ChargingClassificationEngine.clearSession()
         val r3 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 40.0f, phoneConsumptionPowerWatt = 5.0f)
         )
@@ -49,6 +52,7 @@ class ChargingClassificationEngineTest {
         assertEquals(35.0f, r3.netPowerW!!, 0.01f)
 
         // Input 10W + consumption 2W = net 8W = NORMAL
+        ChargingClassificationEngine.clearSession()
         val r4 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 10.0f, phoneConsumptionPowerWatt = 2.0f)
         )
@@ -56,6 +60,7 @@ class ChargingClassificationEngineTest {
         assertEquals(8.0f, r4.netPowerW!!, 0.01f)
 
         // Input 8W + consumption 5W = net 3W = SLOW
+        ChargingClassificationEngine.clearSession()
         val r5 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 8.0f, phoneConsumptionPowerWatt = 5.0f)
         )
@@ -66,36 +71,42 @@ class ChargingClassificationEngineTest {
     @Test
     fun testChargingBoundaries() {
         // 4.99 -> Slow
+        ChargingClassificationEngine.clearSession()
         val r1 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 4.99f, phoneConsumptionPowerWatt = 0.0f)
         )
         assertEquals(ChargingState.SLOW, r1.state)
 
         // 5.00 -> Normal
+        ChargingClassificationEngine.clearSession()
         val r2 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 5.00f, phoneConsumptionPowerWatt = 0.0f)
         )
         assertEquals(ChargingState.NORMAL, r2.state)
 
         // 9.99 -> Normal
+        ChargingClassificationEngine.clearSession()
         val r3 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 9.99f, phoneConsumptionPowerWatt = 0.0f)
         )
         assertEquals(ChargingState.NORMAL, r3.state)
 
         // 10.00 -> Fast
+        ChargingClassificationEngine.clearSession()
         val r4 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 10.00f, phoneConsumptionPowerWatt = 0.0f)
         )
         assertEquals(ChargingState.FAST, r4.state)
 
         // 29.99 -> Fast
+        ChargingClassificationEngine.clearSession()
         val r5 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 29.99f, phoneConsumptionPowerWatt = 0.0f)
         )
         assertEquals(ChargingState.FAST, r5.state)
 
         // 30.00 -> Ultra Fast
+        ChargingClassificationEngine.clearSession()
         val r6 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 30.00f, phoneConsumptionPowerWatt = 0.0f)
         )
@@ -105,36 +116,42 @@ class ChargingClassificationEngineTest {
     @Test
     fun testDischargeBoundaries() {
         // 4.99 -> Light
+        ChargingClassificationEngine.clearSession()
         val r1 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = false, powerWatt = 4.99f)
         )
         assertEquals(ChargingState.LIGHT_DISCHARGE, r1.state)
 
         // 5.00 -> Normal
+        ChargingClassificationEngine.clearSession()
         val r2 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = false, powerWatt = 5.00f)
         )
         assertEquals(ChargingState.NORMAL_DISCHARGE, r2.state)
 
         // 9.99 -> Normal
+        ChargingClassificationEngine.clearSession()
         val r3 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = false, powerWatt = 9.99f)
         )
         assertEquals(ChargingState.NORMAL_DISCHARGE, r3.state)
 
         // 10.00 -> High
+        ChargingClassificationEngine.clearSession()
         val r4 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = false, powerWatt = 10.00f)
         )
         assertEquals(ChargingState.HIGH_DISCHARGE, r4.state)
 
         // 19.99 -> High
+        ChargingClassificationEngine.clearSession()
         val r5 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = false, powerWatt = 19.99f)
         )
         assertEquals(ChargingState.HIGH_DISCHARGE, r5.state)
 
         // 20.00 -> Heavy
+        ChargingClassificationEngine.clearSession()
         val r6 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = false, powerWatt = 20.00f)
         )
@@ -143,6 +160,7 @@ class ChargingClassificationEngineTest {
 
     @Test
     fun testMissingTelemetryScenarios() {
+        ChargingClassificationEngine.clearSession()
         // Missing input power and consumption
         val r1 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, sessionDurationSeconds = 5L)
@@ -150,12 +168,14 @@ class ChargingClassificationEngineTest {
         assertEquals(ChargingState.INITIALIZING, r1.state)
         assertEquals(DataQuality.UNAVAILABLE, r1.dataQuality)
 
+        ChargingClassificationEngine.clearSession()
         val r2 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, sessionDurationSeconds = 20L)
         )
         assertEquals(ChargingState.INSUFFICIENT_DATA, r2.state)
         assertEquals(DataQuality.UNAVAILABLE, r2.dataQuality)
 
+        ChargingClassificationEngine.clearSession()
         // Partial data (input available, consumption missing)
         val r3 = ChargingClassificationEngine.classify(
             ChargingTelemetryInput(isCharging = true, powerWatt = 15.0f, phoneConsumptionPowerWatt = null)

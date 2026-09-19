@@ -7,6 +7,7 @@ import com.example.battery.model.ChargingConfidence
 import com.example.battery.model.ChargingState
 import com.example.battery.model.ChargingTelemetryInput
 import com.example.battery.model.DataQuality
+import com.example.util.PowerCalculator
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
@@ -103,7 +104,6 @@ object ChargingClassificationEngine {
         val now = input.timestampMs
         var explanation = ""
 
-        // Timestamp monotonicity check
         if (lastObservedTimestampMs > 0 && now < lastObservedTimestampMs) {
             explanation = "Warning: backward timestamp sequence detected."
         } else if (lastObservedTimestampMs > 0 && now == lastObservedTimestampMs) {
@@ -113,13 +113,14 @@ object ChargingClassificationEngine {
 
         val validCurrentMa = input.currentNowMa?.let { abs(it) }
         val validVoltageV = input.voltageMv?.let { it / 1000f }
-        val validPowerWatt = input.powerWatt ?: if (validCurrentMa != null && validVoltageV != null) {
-            (validCurrentMa * validVoltageV) / 1000f
-        } else null
+        
+        // Single source of truth: PowerCalculator
+        val inputPowerW = PowerCalculator.calculateInputPowerW(input.voltageMv, input.currentNowMa, input.powerWatt)
+        val consumptionPowerW = input.phoneConsumptionPowerWatt ?: PowerCalculator.calculateConsumptionPowerW(null, input.voltageMv)
 
         // 1. If not charging -> Discharge classification
         if (!input.isCharging) {
-            val dischargePowerW = validPowerWatt ?: (validCurrentMa?.let { (it * (validVoltageV ?: 3.7f)) / 1000f }) ?: (input.measuredVelocityPctPerHr?.let { abs(it) * 0.3f }) ?: 2.0f
+            val dischargePowerW = PowerCalculator.calculateDischargePowerW(input.voltageMv, input.currentNowMa, input.powerWatt, input.measuredVelocityPctPerHr)
             val dischargeState = when {
                 dischargePowerW < 5.0f -> ChargingState.LIGHT_DISCHARGE
                 dischargePowerW < 10.0f -> ChargingState.NORMAL_DISCHARGE
@@ -135,7 +136,7 @@ object ChargingClassificationEngine {
                 consumptionPowerW = dischargePowerW,
                 netPowerW = null,
                 dischargePowerW = dischargePowerW,
-                dataQuality = if (validPowerWatt != null || validCurrentMa != null) DataQuality.VALID else DataQuality.PARTIAL,
+                dataQuality = if (inputPowerW != null || validCurrentMa != null) DataQuality.VALID else DataQuality.PARTIAL,
                 currentMa = validCurrentMa,
                 voltageV = validVoltageV,
                 netBatteryGainPctPerHr = input.measuredVelocityPctPerHr,
@@ -149,20 +150,11 @@ object ChargingClassificationEngine {
         }
 
         // 2. Charging Mode: Net Charging Power Calculation
-        val inputPowerW = validPowerWatt
-        val consumptionPowerW = input.phoneConsumptionPowerWatt
-        
-        val dataQuality: DataQuality
-        val netPowerW: Float?
-        if (inputPowerW != null && consumptionPowerW != null) {
-            dataQuality = DataQuality.VALID
-            netPowerW = inputPowerW - consumptionPowerW
-        } else if (inputPowerW != null) {
-            dataQuality = DataQuality.PARTIAL
-            netPowerW = inputPowerW // without subtracting unknown consumption blindly as zero unless no load
+        val netPowerW = PowerCalculator.calculateNetPowerW(inputPowerW, consumptionPowerW)
+        val dataQuality = if (inputPowerW != null) {
+            if (input.phoneConsumptionPowerWatt == null) DataQuality.PARTIAL else DataQuality.VALID
         } else {
-            dataQuality = DataQuality.UNAVAILABLE
-            netPowerW = null
+            DataQuality.UNAVAILABLE
         }
 
         if (netPowerW == null) {
@@ -228,7 +220,7 @@ object ChargingClassificationEngine {
     }
 
     private fun applyHysteresis(candidate: ChargingState): ChargingState {
-        if (candidate == ChargingState.NOT_CHARGING || candidate == ChargingState.INITIALIZING || candidate == ChargingState.MAINTENANCE) {
+        if (lastStableState == ChargingState.INITIALIZING || !lastStableState.isCharging || candidate == ChargingState.MAINTENANCE) {
             hysteresisWindow.clear()
             hysteresisWindow.add(candidate)
             return candidate
@@ -238,14 +230,10 @@ object ChargingClassificationEngine {
             hysteresisWindow.removeAt(0)
         }
         val candidateCount = hysteresisWindow.count { it == candidate }
-        return if (candidateCount >= 2) {
+        return if (candidateCount >= 2 || hysteresisWindow.size < HYSTERESIS_DEPTH) {
             candidate
         } else {
-            if (lastStableState.isCharging && lastStableState != ChargingState.INITIALIZING) {
-                lastStableState
-            } else {
-                candidate
-            }
+            lastStableState
         }
     }
 }

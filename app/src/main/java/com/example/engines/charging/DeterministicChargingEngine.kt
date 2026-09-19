@@ -5,13 +5,6 @@ import com.example.battery.engine.ChargingClassificationEngine
 import com.example.battery.model.ChargingState
 import com.example.battery.model.ChargingTelemetryInput
 
-/**
- * Netra Deterministic & Evidence-Based Charging Engine
- *
- * Fully delegates to the authoritative [ChargingClassificationEngine].
- * Maintains zero arbitrary 15%/hr fallback constants and strictly adheres to the Zero-Fabrication rule.
- */
-
 enum class EvidenceChargingState(val displayName: String) {
     INITIALIZING("Charging — Calculating rate..."),
     SLOW("Slow Charging"),
@@ -19,9 +12,14 @@ enum class EvidenceChargingState(val displayName: String) {
     SLOW_LOAD_LIMITED("Slow Charging — High Device Load"),
     NORMAL("Normal Charging"),
     FAST("Fast Charging"),
+    ULTRA_FAST("Ultra Fast Charging"),
     MAINTENANCE("Maintenance / Net-Zero"),
     INSUFFICIENT_TELEMETRY("Charging — Insufficient telemetry"),
-    NOT_CHARGING("Discharging")
+    NOT_CHARGING("Discharging"),
+    LIGHT_DISCHARGE("Light Discharge"),
+    NORMAL_DISCHARGE("Normal Discharge"),
+    HIGH_DISCHARGE("High Discharge"),
+    HEAVY_DISCHARGE("Heavy Discharge")
 }
 
 data class EvidenceAssessment(
@@ -38,21 +36,14 @@ data class EvidenceAssessment(
 )
 
 object DeterministicChargingEngine {
-
     fun init(context: Context) {
         ChargingClassificationEngine.init(context)
     }
 
-    /**
-     * Records a completed valid charging session to update the device-specific baseline.
-     */
     fun recordSessionCompletion(context: Context, measuredAvgRatePctHr: Float, powerSource: String = "AC") {
         ChargingClassificationEngine.recordSessionCompletion(context, powerSource, measuredAvgRatePctHr)
     }
 
-    /**
-     * Evaluates charging behaviour without guesswork by delegating to authoritative ChargingClassificationEngine.
-     */
     fun evaluate(
         isCharging: Boolean,
         sessionDurationSeconds: Long,
@@ -84,6 +75,10 @@ object DeterministicChargingEngine {
 
         val mappedState = when (result.state) {
             ChargingState.NOT_CHARGING -> EvidenceChargingState.NOT_CHARGING
+            ChargingState.LIGHT_DISCHARGE -> EvidenceChargingState.LIGHT_DISCHARGE
+            ChargingState.NORMAL_DISCHARGE -> EvidenceChargingState.NORMAL_DISCHARGE
+            ChargingState.HIGH_DISCHARGE -> EvidenceChargingState.HIGH_DISCHARGE
+            ChargingState.HEAVY_DISCHARGE -> EvidenceChargingState.HEAVY_DISCHARGE
             ChargingState.INITIALIZING -> EvidenceChargingState.INITIALIZING
             ChargingState.SLOW -> {
                 if (result.isThermalLimited) EvidenceChargingState.SLOW_THERMAL_LIMITED
@@ -92,6 +87,7 @@ object DeterministicChargingEngine {
             }
             ChargingState.NORMAL -> EvidenceChargingState.NORMAL
             ChargingState.FAST -> EvidenceChargingState.FAST
+            ChargingState.ULTRA_FAST -> EvidenceChargingState.ULTRA_FAST
             ChargingState.MAINTENANCE -> EvidenceChargingState.MAINTENANCE
             ChargingState.INSUFFICIENT_DATA -> EvidenceChargingState.INSUFFICIENT_TELEMETRY
         }

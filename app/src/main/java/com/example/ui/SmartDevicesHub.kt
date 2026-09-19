@@ -82,6 +82,10 @@ fun SmartDevicesHub(
     val batteryState by viewModel.sanitizedBatteryState.collectAsStateWithLifecycle()
     val canonicalDevices by NetraDeviceRegistry.canonicalDevices.collectAsStateWithLifecycle()
 
+    // --- System Connectivity States ---
+    val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
+    var isBluetoothEnabled by remember { mutableStateOf(bluetoothAdapter?.isEnabled ?: false) }
+
     // --- Category Selection State ---
     var selectedCategory by remember { mutableStateOf(DeviceCategory.ALL_DEVICES) }
     var isScanning by remember { mutableStateOf(false) }
@@ -89,14 +93,13 @@ fun SmartDevicesHub(
     // --- Active Scanner Animation ---
     LaunchedEffect(isScanning) {
         if (isScanning) {
-            delay(2500)
+            try {
+                bluetoothAdapter?.startDiscovery()
+            } catch (e: Exception) {}
+            delay(3000)
             isScanning = false
         }
     }
-
-    // --- System Connectivity States ---
-    val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
-    var isBluetoothEnabled by remember { mutableStateOf(bluetoothAdapter?.isEnabled ?: false) }
 
     val wifiManager = remember { context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager }
     var isWifiEnabled by remember { mutableStateOf(wifiManager?.isWifiEnabled ?: false) }

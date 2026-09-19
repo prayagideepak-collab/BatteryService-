@@ -4,12 +4,10 @@ import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -26,15 +24,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.service.BatteryState
+import com.example.service.DataSynchronizationManager
 import com.example.util.TimeManager
 import com.example.viewmodel.BatteryViewModel
-import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 /**
- * Unified Live Power Telemetry Section for Netra Battery Sentinel Pro.
- * Adheres strictly to the principle that Charging and Discharging are two states of the SAME telemetry system.
- * All displayed numbers and graph trajectories are powered exclusively by real device telemetry streams.
+ * Concise LazyColumn list display separating active device status, charging state,
+ * and critical telemetry into simple, distinct list items without legacy canvas components.
  */
 @Composable
 fun DashboardSection(
@@ -42,16 +39,10 @@ fun DashboardSection(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val state by viewModel.sanitizedBatteryState.collectAsStateWithLifecycle()
     val systemStatus by viewModel.systemStatus.collectAsStateWithLifecycle()
     val syncState by viewModel.universalSyncState.collectAsStateWithLifecycle()
-
-    val history24h by viewModel.batteryHistory24h.collectAsStateWithLifecycle()
-    val trendLogs by viewModel.allTrendLogs.collectAsStateWithLifecycle(emptyList())
-    val selectedCalendarDate by viewModel.selectedCalendarDate.collectAsStateWithLifecycle()
-
-    var selectedMetricDialog by remember { mutableStateOf<String?>(null) }
-    val scrollState = rememberScrollState()
 
     // 100ms precision ticker for smooth live countdown
     val stateTimestamp = remember(state) { System.currentTimeMillis() }
@@ -62,7 +53,6 @@ fun DashboardSection(
             kotlinx.coroutines.delay(100)
         }
     }
-
     val liveTimeRemainingStr = remember(state.remainingTimeMs, liveTick) {
         if (state.remainingTimeMs > 0) {
             val elapsed = liveTick - stateTimestamp
@@ -73,479 +63,206 @@ fun DashboardSection(
         }
     }
 
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(scrollState)
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Unified Operational Identity & Stream Status Bar
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-            modifier = Modifier.fillMaxWidth().testTag("live_telemetry_status_bar")
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        // --- ITEM 1: ACTIVE DEVICE STATUS ---
+        item(key = "active_device_status") {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth().testTag("active_device_status_card")
             ) {
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .background(
-                                color = when (systemStatus) {
-                                    BatteryViewModel.SystemOperationalStatus.ACTIVE_VERIFIED -> Color(0xFF00E676)
-                                    BatteryViewModel.SystemOperationalStatus.RECOVERING_REVALIDATING -> Color(0xFFFFAB00)
-                                    BatteryViewModel.SystemOperationalStatus.SUSPENDED -> Color(0xFFFF1744)
-                                },
-                                shape = CircleShape
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .background(
+                                    color = when (systemStatus) {
+                                        BatteryViewModel.SystemOperationalStatus.ACTIVE_VERIFIED -> Color(0xFF00E676)
+                                        BatteryViewModel.SystemOperationalStatus.RECOVERING_REVALIDATING -> Color(0xFFFFAB00)
+                                        BatteryViewModel.SystemOperationalStatus.SUSPENDED -> Color(0xFFFF1744)
+                                    },
+                                    shape = CircleShape
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Active Device Telemetry",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = if (state.isCharging) "Power Inflow Active • 1.5s Stream" else "Live Discharging Stream • Verified",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                IconButton(
-                    onClick = { viewModel.triggerUniversalRefresh(context) },
-                    modifier = Modifier.size(28.dp).testTag("refresh_telemetry_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = "Refresh Telemetry Stream",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
+                            Text(
+                                text = if (state.isCharging) "Power Inflow Active • 1.5s Stream" else "Live Discharging Stream • Verified",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                DataSynchronizationManager.refreshBatteryAndBluetooth(context)
+                                viewModel.triggerUniversalRefresh(context)
+                            }
+                        },
+                        modifier = Modifier.size(36.dp).testTag("refresh_status_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Refresh Telemetry",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
-        // Universal Sync Status & Live Panel
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        // --- ITEM 2: CHARGING STATE & BATTERY ---
+        item(key = "charging_state_item") {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth().testTag("charging_state_card")
             ) {
-                Text(
-                    text = if (syncState.isRefreshing) "Refreshing application data..." else if (syncState.lastRefreshTimestamp > 0L) "Data Synced: ${syncState.overallPercentage}%" else "Data Synced: Not synchronized yet",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.testTag("sync_percentage_text")
-                )
-                if (syncState.lastRefreshTimestamp > 0L) {
-                    Text(
-                        text = "Updated: ${java.text.SimpleDateFormat("hh:mm a", java.util.Locale.US).format(java.util.Date(syncState.lastRefreshTimestamp))}",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (syncState.isRefreshing || syncState.tasks.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth().testTag("sync_panel")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        for ((_, task) in syncState.tasks) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    val (symbol, color) = when (task.state) {
-                                        com.example.engines.coordinator.SyncState.SUCCESS -> "✓" to Color(0xFF00E676)
-                                        com.example.engines.coordinator.SyncState.RUNNING -> "⟳" to Color(0xFFFFAB00)
-                                        com.example.engines.coordinator.SyncState.PENDING -> "○" to Color.Gray
-                                        com.example.engines.coordinator.SyncState.FAILED -> "✕" to Color(0xFFFF1744)
-                                        com.example.engines.coordinator.SyncState.UNAVAILABLE -> "—" to Color.Gray
-                                        com.example.engines.coordinator.SyncState.SKIPPED_WITH_REASON -> "—" to Color.Gray
-                                    }
-                                    Text(
-                                        text = "$symbol ${task.displayName}: ${task.state.name.lowercase()}",
-                                        fontSize = 11.sp,
-                                        color = if (task.state == com.example.engines.coordinator.SyncState.SUCCESS) MaterialTheme.colorScheme.onSurface else color
-                                    )
-                                }
-                                if (!task.errorReason.isNullOrBlank()) {
-                                    Text(
-                                        text = task.errorReason,
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.error,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (state.isCharging) Icons.Filled.Power else Icons.Filled.BatteryFull,
+                                contentDescription = null,
+                                tint = if (state.isCharging) Color(0xFF00E676) else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = if (state.isCharging) "Charging State" else "Discharging State",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = state.chargingType.ifBlank { "Standard AC / USB" },
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
+                        }
+                        Text(
+                            text = "${state.percentage}%",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Estimated Time", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(liveTimeRemainingStr, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Speed / Rate", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${String.format(java.util.Locale.US, "%.1f", state.speed)}%/h", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
             }
         }
 
-        // 2. Large Circular Battery Hero Gauge
-        LiveCircularBatteryHeroGauge(
-            state = state,
-            liveTimeRemainingStr = liveTimeRemainingStr
-        )
-
-        // 3. Session-Aware 2x2 Telemetry Cards Grid with Real-Time Micro-Graphs
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Row 1: Voltage & Temperature
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        // --- ITEM 3: CRITICAL TELEMETRY ---
+        item(key = "critical_telemetry_item") {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth().testTag("critical_telemetry_card")
             ) {
-                // Voltage Card
-                val voltDisplay = if (state.voltage > 0) {
-                    String.format(java.util.Locale.US, "%.3f V", state.voltage / 1000f)
-                } else "4.120 V"
-
-                val voltSubtitle = if (state.voltage > 4300) "High Voltage" else if (state.voltage < 3500) "Low Voltage" else "Nominal Range (3.7-4.2V)"
-
-                 LiveTelemetryCard(
-                    title = "VOLTAGE",
-                    value = voltDisplay,
-                    subtitle = voltSubtitle,
-                    badgeText = "${state.voltage} mV",
-                    badgeColor = MaterialTheme.colorScheme.primary,
-                    icon = Icons.Outlined.Speed,
-                    modifier = Modifier.weight(1f),
-                    onClick = {}
-                )
-
-                // Temperature Card
-                val tempDisplay = if (state.temperature > -999f) {
-                    String.format(java.util.Locale.US, "%.1f °C", state.temperature)
-                } else "28.5 °C"
-
-                val tempStatus = when {
-                    state.temperature >= 45f -> "Critical Alert (>45°)"
-                    state.temperature >= 40f -> "Warm / Heavy Load"
-                    state.temperature >= 35f -> "Moderate Operating"
-                    else -> "Cool & Optimal"
-                }
-
-                val tempBadgeColor = when {
-                    state.temperature >= 45f -> Color(0xFFFF1744)
-                    state.temperature >= 40f -> Color(0xFFFF9100)
-                    else -> Color(0xFF00E676)
-                }
-
-                LiveTelemetryCard(
-                    title = "TEMPERATURE",
-                    value = tempDisplay,
-                    subtitle = tempStatus,
-                    badgeText = if (state.isHeatProtocolActive) "+${state.solarHeatDeltaTemp}° Solar" else "Sensor Ok",
-                    badgeColor = tempBadgeColor,
-                    icon = Icons.Outlined.Thermostat,
-                    modifier = Modifier.weight(1f),
-                    onClick = {}
-                )
-            }
-
-            // Row 2: Current & Power
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Current Card
-                val isCharging = state.isCharging
-                val currentDisplay = if (state.currentNow != 0) {
-                    val sign = if (isCharging) "+" else "-"
-                    val absA = abs(state.currentNow) / 1000f
-                    String.format(java.util.Locale.US, "%s%.2f A", sign, absA)
-                } else {
-                    if (isCharging) "+1.50 A" else "-0.25 A"
-                }
-
-                val currentBadge = if (isCharging) "⚡ Inflow" else "🔻 Outflow"
-                val currentBadgeColor = if (isCharging) Color(0xFF00E676) else Color(0xFFFF5252)
-
-                LiveTelemetryCard(
-                    title = if (isCharging) "CHARGE INFLOW" else "CURRENT DRAIN",
-                    value = currentDisplay,
-                    subtitle = "${if (isCharging) "+" else "-"}${abs(state.currentNow)} mA",
-                    badgeText = currentBadge,
-                    badgeColor = currentBadgeColor,
-                    valueColor = if (isCharging) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurface,
-                    icon = Icons.Outlined.ElectricMeter,
-                    modifier = Modifier.weight(1f),
-                    onClick = {}
-                )
-
-                // Power Card
-                val powerWattVal = if (state.powerWatt > 0.01f) {
-                    state.powerWatt
-                } else {
-                    val v = if (state.voltage > 0) state.voltage / 1000f else 4.0f
-                    val a = abs(state.currentNow) / 1000f
-                    v * a
-                }
-
-                val powerDisplay = String.format(java.util.Locale.US, "%s%.2f W", if (isCharging) "+" else "-", powerWattVal)
-                val powerBadge = if (isCharging) "Input Pwr" else "Load Pwr"
-
-                LiveTelemetryCard(
-                    title = if (isCharging) "CHARGE POWER" else "POWER DRAIN",
-                    value = powerDisplay,
-                    subtitle = if (isCharging) "Inflow Wattage" else "Active System Load",
-                    badgeText = powerBadge,
-                    badgeColor = if (isCharging) Color(0xFF00E676) else Color(0xFFFFAB00),
-                    valueColor = if (isCharging) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurface,
-                    icon = Icons.Outlined.Bolt,
-                    modifier = Modifier.weight(1f),
-                    onClick = {}
-                )
-            }
-        }
-
-        // 4. Battery Health & Capacity Architecture Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("battery_health_card"),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Filled.HealthAndSafety,
+                            imageVector = Icons.Outlined.Thermostat,
                             contentDescription = null,
-                            tint = Color(0xFF00E676),
-                            modifier = Modifier.size(18.dp)
+                            tint = Color(0xFFFF9800),
+                            modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "CELL HEALTH & CAPACITY",
-                            fontSize = 12.sp,
+                            text = "Critical Telemetry & Sensors",
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            letterSpacing = 0.5.sp
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF00E676).copy(alpha = 0.15f),
-                        border = BorderStroke(1.dp, Color(0xFF00E676).copy(alpha = 0.3f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "${state.healthPercentage}% • ${state.health}",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF00E676),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
+                        TelemetryDetailBadge("Temperature", "${state.temperature}°C", Icons.Outlined.DeviceThermostat)
+                        TelemetryDetailBadge("Voltage", "${state.voltage}V", Icons.Outlined.FlashOn)
+                        TelemetryDetailBadge("Health", state.health, Icons.Outlined.VerifiedUser)
                     }
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    HealthSubMetric(
-                        label = "EST. CAPACITY",
-                        value = state.estimatedCapacity?.let { "$it mAh" } ?: "Unavailable",
-                        detail = state.designCapacity?.let { "Design: $it mAh" } ?: "Design: Unverified"
-                    )
-                    HealthSubMetric(
-                        label = "CYCLE COUNT",
-                        value = if (state.cycleCount > 0) "${state.cycleCount}" else "42 (Est)",
-                        detail = "Hardware Li-ion"
-                    )
-                    HealthSubMetric(
-                        label = "SAFETY INDEX",
-                        value = "100 / 100",
-                        detail = "Pristine Status"
-                    )
-                }
             }
         }
     }
 }
 
 @Composable
-private fun HealthSubMetric(
-    label: String,
-    value: String,
-    detail: String
-) {
-    Column {
-        Text(
-            text = label,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 0.5.sp
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = value,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = detail,
-            fontSize = 9.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-        )
-    }
-}
-
-@Composable
-fun LiveCircularBatteryHeroGauge(
-    state: com.example.service.BatteryState,
-    liveTimeRemainingStr: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+fun TelemetryDetailBadge(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+        modifier = Modifier.padding(2.dp)
     ) {
         Column(
-            modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = "${state.percentage}%",
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = if (state.isCharging) "Charging (${state.chargingType})" else "Discharging",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = liveTimeRemainingStr,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
-
-@Composable
-fun LiveTelemetryCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    badgeText: String,
-    badgeColor: Color,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit = {}
-) {
-    Card(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(14.dp)
-                .fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = badgeColor,
-                    modifier = Modifier.size(20.dp)
-                )
-                Surface(
-                    color = badgeColor.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = badgeText,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = badgeColor
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = title,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = value,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = valueColor
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+            Text(text = label, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = value, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

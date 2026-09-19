@@ -2791,47 +2791,50 @@ fun BackupEngineCard() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val backupState by com.example.engines.backup.IntelligentBackupEngine.backupStateFlow.collectAsStateWithLifecycle()
     var lastBackupString by remember { mutableStateOf<String?>(null) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("backup_migration_card"),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Backup, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text("Backup & Device Transfer Engine", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("Status: ${backupState.statusMessage}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("backup_migration_card"),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Backup, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Backup & Device Transfer Engine", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Status: ${backupState.statusMessage}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        com.example.engines.backup.IntelligentBackupEngine.createEncryptedBackup(context) { result ->
-                            lastBackupString = result
-                        }
-                    },
-                    modifier = Modifier.weight(1f).height(36.dp)
-                ) {
-                    Text("Create Backup", fontSize = 11.sp)
-                }
-                OutlinedButton(
-                    onClick = {
-                        lastBackupString?.let {
-                            com.example.engines.backup.IntelligentBackupEngine.restoreEncryptedBackup(context, it) {}
-                        }
-                    },
-                    enabled = lastBackupString != null,
-                    modifier = Modifier.weight(1f).height(36.dp)
-                ) {
-                    Text("Restore", fontSize = 11.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            com.example.engines.backup.IntelligentBackupEngine.createEncryptedBackup(context) { result ->
+                                lastBackupString = result
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(36.dp)
+                    ) {
+                        Text("Create Backup", fontSize = 11.sp)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            lastBackupString?.let {
+                                com.example.engines.backup.IntelligentBackupEngine.restoreEncryptedBackup(context, it) {}
+                            }
+                        },
+                        enabled = lastBackupString != null,
+                        modifier = Modifier.weight(1f).height(36.dp)
+                    ) {
+                        Text("Restore", fontSize = 11.sp)
+                    }
                 }
             }
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        FirebaseCloudSyncCard()
     }
 }
 

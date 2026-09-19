@@ -9753,133 +9753,7 @@ fun CircularHealthIndicator(
     }
 }
 
-@Composable
-fun InteractiveRealtimeGraph(
-    points: List<Float>,
-    labelY: String,
-    lineColor: Color,
-    modifier: Modifier = Modifier
-) {
-    if (points.size < 2) return
-    var touchedIndex by remember { mutableStateOf<Int?>(null) }
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(110.dp)
-                .pointerInput(points) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            if (points.isNotEmpty()) {
-                                val stepX = size.width / (points.size - 1).coerceAtLeast(1)
-                                val index = (offset.x / stepX).roundToInt().coerceIn(0, points.size - 1)
-                                touchedIndex = index
-                            }
-                        }
-                    )
-                }
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val width = size.width
-                val height = size.height
-                if (points.isEmpty()) return@Canvas
-
-                val maxVal = (points.maxOrNull() ?: 100f).coerceAtLeast(1f)
-                val minVal = (points.minOrNull() ?: 0f).coerceAtMost(maxVal - 0.1f)
-                val stepX = width / (points.size - 1).coerceAtLeast(1)
-
-                val path = Path()
-                points.forEachIndexed { i, value ->
-                    val x = i * stepX
-                    val y = height - ((value - minVal) / (maxVal - minVal).coerceAtLeast(0.1f)) * height
-                    if (i == 0) {
-                        path.moveTo(x, y)
-                    } else {
-                        path.lineTo(x, y)
-                    }
-                }
-
-                // Fill area below path
-                val fillPath = Path().apply {
-                    addPath(path)
-                    lineTo(width, height)
-                    lineTo(0f, height)
-                    close()
-                }
-                drawPath(
-                    path = fillPath,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(lineColor.copy(alpha = 0.18f), Color.Transparent)
-                    )
-                )
-
-                // Draw line
-                drawPath(
-                    path = path,
-                    color = lineColor,
-                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-                )
-
-                // Draw touched point indicator
-                touchedIndex?.let { index ->
-                    if (index < points.size) {
-                        val x = index * stepX
-                        val y = height - ((points[index] - minVal) / (maxVal - minVal).coerceAtLeast(0.1f)) * height
-                        drawCircle(
-                            color = lineColor,
-                            radius = 5.dp.toPx(),
-                            center = Offset(x, y)
-                        )
-                        drawCircle(
-                            color = Color.White,
-                            radius = 2.5.dp.toPx(),
-                            center = Offset(x, y)
-                        )
-                    }
-                }
-            }
-
-            // Show tooltips
-            touchedIndex?.let { index ->
-                if (index < points.size) {
-                    val valueText = String.format(java.util.Locale.US, "%.1f %s", points[index], labelY)
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "Log $index: $valueText",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(2.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Past Logs", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-            Button(
-                onClick = { /* Export simulation action */ },
-                colors = ButtonDefaults.textButtonColors(),
-                contentPadding = PaddingValues(horizontal = 4.dp),
-                modifier = Modifier.height(18.dp)
-            ) {
-                Text("Export CSV 📊", fontSize = 8.sp, color = lineColor, fontWeight = FontWeight.Bold)
-            }
-            Text("Real-time Live", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-        }
-    }
-}
 
 @Composable
 fun EstimatedBatteryHealthView(
@@ -10183,10 +10057,10 @@ fun BatteryModuleView(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
-                    InteractiveRealtimeGraph(
-                        points = batteryHistory,
-                        labelY = "%",
-                        lineColor = dynamicColor
+                    Text(
+                        text = "Telemetry Active • ${batteryHistory.size} samples logged",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -10395,10 +10269,10 @@ fun ThermalModuleView(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
-                InteractiveRealtimeGraph(
-                    points = thermalHistory,
-                    labelY = "°C",
-                    lineColor = thermalColor
+                Text(
+                    text = "Thermal History Active • ${thermalHistory.size} samples logged",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -10599,10 +10473,10 @@ fun MagneticModuleView(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
-                InteractiveRealtimeGraph(
-                    points = magneticHistory,
-                    labelY = "μT",
-                    lineColor = magColor
+                Text(
+                    text = "Magnetic Intensity Active • ${magneticHistory.size} samples logged",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -10978,10 +10852,10 @@ fun NetworkStatisticsModuleView(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
-                    InteractiveRealtimeGraph(
-                        points = bluetoothHistory,
-                        labelY = "%",
-                        lineColor = Color(0xFF2196F3)
+                    Text(
+                        text = "Bluetooth Telemetry Active • ${bluetoothHistory.size} records",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     Text(
@@ -11078,7 +10952,11 @@ fun BluetoothModuleView(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 if (bluetoothHistory.isNotEmpty()) {
-                    InteractiveRealtimeGraph(points = bluetoothHistory, labelY = "RSSI", lineColor = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "Bluetooth RSSI samples logged: ${bluetoothHistory.size}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -11137,7 +11015,11 @@ fun WeatherModuleView(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 if (weatherHistory.isNotEmpty()) {
-                    InteractiveRealtimeGraph(points = weatherHistory, labelY = "°C", lineColor = Color(0xFFFF9800))
+                    Text(
+                        text = "Temperature samples logged: ${weatherHistory.size}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -11195,7 +11077,11 @@ fun StorageModuleView(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 if (storageHistory.isNotEmpty()) {
-                    InteractiveRealtimeGraph(points = storageHistory, labelY = "%", lineColor = Color(0xFF4CAF50))
+                    Text(
+                        text = "Storage usage records: ${storageHistory.size}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -11253,7 +11139,11 @@ fun RamModuleView(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 if (ramHistory.isNotEmpty()) {
-                    InteractiveRealtimeGraph(points = ramHistory, labelY = "%", lineColor = Color(0xFF9C27B0))
+                    Text(
+                        text = "RAM pressure records: ${ramHistory.size}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -11349,10 +11239,10 @@ fun ChargingModuleView(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     if (chargingHistory.isNotEmpty()) {
-                        InteractiveRealtimeGraph(
-                            points = chargingHistory,
-                            labelY = "%",
-                            lineColor = chargeColor
+                        Text(
+                            text = "Charging history records: ${chargingHistory.size}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         Text(

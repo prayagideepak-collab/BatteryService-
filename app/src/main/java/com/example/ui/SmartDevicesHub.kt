@@ -202,12 +202,11 @@ fun SmartDevicesHub(
 
                     if (isLive) {
                         val baseRssi = if (dev.batteryLevel > 50) -55 else -68
-                        val randomOffset = (-5..5).random()
-                        val currentRssi = (baseRssi + randomOffset).coerceIn(-100, -30)
+                        val currentRssi = deviceLastRssi[id] ?: baseRssi
 
                         deviceLastRssi[id] = currentRssi
                         deviceLastSignalTime[id] = nowTime
-                        deviceStability[id] = if (Math.abs(randomOffset) < 4) "Stable" else "Fluctuating"
+                        deviceStability[id] = "Stable"
 
                         val list = deviceGraphsMap[id]?.toMutableList() ?: mutableListOf()
                         if (list.size >= 25) list.removeAt(0)
@@ -251,11 +250,7 @@ fun SmartDevicesHub(
             if (isConnected) {
                 netStateValue = "CONNECTED"
                 netLastSeenTime = nowTime
-                netLastRssi = if (safeNet.isWifiConnected) {
-                    if (safeNet.rssi != -1) safeNet.rssi else -55
-                } else {
-                    -85 + (-4..4).random()
-                }
+                netLastRssi = if (safeNet.rssi != -1) safeNet.rssi else -75
                 netLinkSpeed = if (safeNet.isWifiConnected) safeNet.linkSpeedMbps else 150
 
                 if (netGraphSamples.size >= 25) netGraphSamples.removeAt(0)
@@ -324,8 +319,7 @@ fun SmartDevicesHub(
                 }
 
                 lastPingMs = if (hasInternet) {
-                    val basePing = if (safeNet.isWifiConnected) 25 else 55
-                    basePing + (-4..8).random()
+                    if (safeNet.isWifiConnected) 25 else 55
                 } else {
                     -1
                 }

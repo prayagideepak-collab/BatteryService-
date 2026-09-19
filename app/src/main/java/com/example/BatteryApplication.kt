@@ -9,6 +9,7 @@ import com.example.util.GlobalErrorHandler
 import com.example.util.SafeModeInitializer
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.data.BatteryDatabase
@@ -247,9 +248,16 @@ class BatteryApplication : Application() {
     }
 
     private fun scheduleDataSyncWork() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.UNMETERED)
+            .setRequiresBatteryNotLow(true)
+            .build()
+
         val workRequest = PeriodicWorkRequestBuilder<com.example.workers.DataSynchronizationWorker>(
             15, TimeUnit.MINUTES
-        ).build()
+        )
+            .setConstraints(constraints)
+            .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "dataSyncWork",

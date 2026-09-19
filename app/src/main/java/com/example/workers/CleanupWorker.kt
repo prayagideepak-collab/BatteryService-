@@ -22,6 +22,10 @@ class CleanupWorker(appContext: Context, workerParams: WorkerParameters) :
             dao.clearOldDischargingSessions(sevenDaysAgo)
             dao.clearOldChargingSessions(sevenDaysAgo)
 
+            // Prune battery telemetry records older than 30 days (Data Minimization)
+            val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+            database.batteryTelemetryDao().pruneOldTelemetry(thirtyDaysAgo)
+
             // Prune local diagnostic log files older than 7 days
             DiagnosticLogger.pruneOldLogs(applicationContext, sevenDaysAgo)
 

@@ -27,10 +27,17 @@ object DataSynchronizationManager {
             val db = BatteryDatabase.getDatabase(appCtx)
             val repo = BatteryRepository(db.batteryDao())
 
+            val telemetryRepo = com.example.data.BatteryTelemetrySyncRepository(
+                db.batteryTelemetryDao(),
+                com.example.identity.AuthManager.getInstance(appCtx)
+            )
+            val syncSuccess = telemetryRepo.syncBatchToServer()
+            Log.d(TAG, "Telemetry batch sync result: $syncSuccess")
+
             repo.logBatteryEvent(
                 eventType = "SYSTEM_SYNC",
                 title = "Data Synchronization",
-                details = "Synchronization completed triggered by: $triggeredBy",
+                details = "Synchronization completed triggered by: $triggeredBy (Telemetry synced: $syncSuccess)",
                 category = "AUDIT",
                 source = "DataSyncManager"
             )

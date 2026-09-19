@@ -26,9 +26,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         BatteryHistoryEntity::class,
         AppVersionEntity::class,
         SyncTaskEntity::class,
-        ChargingProtectionSessionEntity::class
+        ChargingProtectionSessionEntity::class,
+        BatteryTelemetry::class,
+        SelfHealingAudit::class
     ],
-    version = 48,
+    version = 50,
     exportSchema = false
 )
 abstract class BatteryDatabase : RoomDatabase() {
@@ -36,6 +38,8 @@ abstract class BatteryDatabase : RoomDatabase() {
     abstract fun deviceDao(): com.example.devices.DeviceDao
     abstract fun batteryHistoryDao(): BatteryHistoryDao
     abstract fun syncTaskDao(): SyncTaskDao
+    abstract fun batteryTelemetryDao(): BatteryTelemetryDao
+    abstract fun selfHealingAuditDao(): SelfHealingAuditDao
 
     companion object {
         @Volatile

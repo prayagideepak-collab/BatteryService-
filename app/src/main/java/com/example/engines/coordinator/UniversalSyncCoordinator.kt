@@ -252,6 +252,42 @@ object UniversalSyncCoordinator : Engine {
             }
         ))
 
+        // 3.5 CHARGING PROTECTION & LIMIT STATE TASK
+        taskRegistry.registerTask(SyncTaskDescriptor(
+            taskId = "CHARGING_PROTECTION",
+            displayName = "Charging Protection & System Limit",
+            category = "HARDWARE",
+            isApplicable = { true },
+            executor = { context ->
+                try {
+                    val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                    val plugged = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: 0
+                    val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+                    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+                    val health = intent?.getIntExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_UNKNOWN) ?: BatteryManager.BATTERY_HEALTH_UNKNOWN
+
+                    val healthStr = when (health) {
+                        BatteryManager.BATTERY_HEALTH_GOOD -> "Good"
+                        BatteryManager.BATTERY_HEALTH_OVERHEAT -> "Overheat Warning"
+                        BatteryManager.BATTERY_HEALTH_DEAD -> "Dead"
+                        BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "Over Voltage"
+                        BatteryManager.BATTERY_HEALTH_COLD -> "Cold"
+                        else -> "Nominal"
+                    }
+
+                    val details = if (isCharging) {
+                        "Charging active (Plugged: $plugged, Health: $healthStr) - System limits managed by OS"
+                    } else {
+                        "Discharging (Health: $healthStr) - Standby"
+                    }
+
+                    SyncTaskResult(SyncState.SUCCESS, null, 100, details)
+                } catch (e: Exception) {
+                    SyncTaskResult(SyncState.FAILED, e.message ?: "Charging protection sync error", 0)
+                }
+            }
+        ))
+
         // 4. NETWORK STATE TASK
         taskRegistry.registerTask(SyncTaskDescriptor(
             taskId = "NETWORK_STATE",
